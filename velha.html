@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Jogo da Velha</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+.tab{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(8px,2.4vw,12px);background:var(--board);
+  padding:clamp(8px,2.4vw,12px);border-radius:14px}
+.casa{aspect-ratio:1;background:var(--cell);border-radius:12px;color:var(--fg);padding:0;
+  font-family:var(--display);font-weight:800;font-size:clamp(2.6rem,16vw,4.4rem);line-height:1}
+.casa:hover:not(:disabled){filter:brightness(1.04)}
+.casa:disabled{cursor:default;filter:none}
+.casa.X{color:var(--accent)} .casa.O{color:var(--blue)}
+.casa.ganha{background:var(--gold);color:#1B2433}
+.casa span{display:inline-block;animation:surge .2s ease-out}
+@keyframes surge{from{transform:scale(.4);opacity:0}}
+.modo{display:flex;gap:6px}
+.modo button{padding:7px 12px}
+.modo button[aria-pressed="false"]{background:var(--panel);color:var(--fg)}
+#status{font-weight:600;color:var(--fg);text-align:center;margin:0;min-height:1.4em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Ve<span>lha</span></h1>
+    <div class="scores">
+      <div class="score"><small>X</small><b id="px">0</b></div>
+      <div class="score"><small>Empates</small><b id="pe">0</b></div>
+      <div class="score"><small>O</small><b id="po">0</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <div class="modo" role="group" aria-label="Modo">
+      <button data-m="cpu" aria-pressed="true">vs Computador</button>
+      <button data-m="2p" aria-pressed="false">2 jogadores</button>
+    </div>
+    <button id="novo" class="sec">Nova partida</button>
+  </div>
+  <div class="tab" id="tab"></div>
+  <p id="status"></p>
+  <p class="ajuda">Contra o computador você é o X. Ele não perde — consegue empatar?</p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const LINHAS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+let tab, vez, fim, modo = 'cpu', placar = {X:0,O:0,E:0}, comeca = 'X';
+const casas = [];
+
+for (let i=0;i<9;i++){
+  const b = document.createElement('button');
+  b.className = 'casa'; b.setAttribute('aria-label', `Casa ${i+1}`);
+  b.onclick = () => jogar(i);
+  $('tab').appendChild(b); casas.push(b);
+}
+
+function vencedor(t){
+  for (const l of LINHAS){ const [a,b,c] = l; if (t[a] && t[a]===t[b] && t[a]===t[c]) return {j:t[a], l}; }
+  return t.every(Boolean) ? {j:'E'} : null;
+}
+
+function minimax(t, j){
+  const v = vencedor(t);
+  if (v) return {s: v.j==='O' ? 10 : v.j==='X' ? -10 : 0};
+  let melhor = {s: j==='O' ? -Infinity : Infinity};
+  t.forEach((c,i) => {
+    if (c) return;
+    t[i] = j;
+    const r = minimax(t, j==='O' ? 'X' : 'O');
+    t[i] = null;
+    r.s += j==='O' ? -0.01 : 0.01; // prefere vitórias rápidas
+    if (j==='O' ? r.s > melhor.s : r.s < melhor.s) melhor = {s:r.s, i};
+  });
+  return melhor;
+}
+
+function nova(){
+  tab = Array(9).fill(null); fim = false; vez = comeca;
+  casas.forEach(c => { c.textContent = ''; c.className = 'casa'; c.disabled = false; });
+  status();
+  if (modo==='cpu' && vez==='O') setTimeout(cpu, 400);
+}
+
+function status(msg){
+  $('status').textContent = msg || (modo==='cpu' ? (vez==='X' ? 'Sua vez (X)' : 'Computador pensando…') : `Vez do ${vez}`);
+}
+
+function jogar(i){
+  if (fim || tab[i] || (modo==='cpu' && vez==='O')) return;
+  marcar(i);
+  if (!fim && modo==='cpu') setTimeout(cpu, 350);
+}
+
+function cpu(){
+  if (fim) return;
+  const livres = tab.map((c,i)=>c?null:i).filter(i=>i!==null);
+  const i = livres.length === 9 ? [0,2,4,6,8][Math.floor(Math.random()*5)] : minimax(tab.slice(), 'O').i;
+  marcar(i);
+}
+
+function marcar(i){
+  tab[i] = vez;
+  casas[i].innerHTML = `<span>${vez}</span>`; casas[i].classList.add(vez); casas[i].disabled = true;
+  const v = vencedor(tab);
+  if (v){
+    fim = true;
+    casas.forEach(c => c.disabled = true);
+    placar[v.j]++;
+    $('px').textContent = placar.X; $('po').textContent = placar.O; $('pe').textContent = placar.E;
+    if (v.l) v.l.forEach(k => casas[k].classList.add('ganha'));
+    status(v.j==='E' ? 'Deu velha! Empate.' : modo==='cpu' ? (v.j==='X' ? 'Você venceu! 🎉' : 'O computador venceu.') : `${v.j} venceu! 🎉`);
+    comeca = comeca==='X' ? 'O' : 'X';
+    return;
+  }
+  vez = vez==='X' ? 'O' : 'X';
+  status();
+}
+
+document.querySelectorAll('.modo button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.modo button').forEach(x => x.setAttribute('aria-pressed', x===b));
+  modo = b.dataset.m; placar = {X:0,O:0,E:0}; comeca = 'X';
+  $('px').textContent = $('po').textContent = $('pe').textContent = 0;
+  nova();
+});
+$('novo').onclick = nova;
+nova();
+</script>
+</body>
+</html>

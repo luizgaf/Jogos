@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Campo Minado</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+.campo{display:grid;gap:3px;background:var(--board);padding:6px;border-radius:14px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.q{aspect-ratio:1;border-radius:5px;background:var(--blue);color:#fff;padding:0;display:grid;place-items:center;
+  font-family:var(--display);font-weight:600;font-size:clamp(.7rem,3.6vw,1rem);line-height:1}
+.q:hover{filter:brightness(1.12)}
+.q:active{transform:none}
+.q.aberta{background:var(--cell);cursor:default;filter:none}
+.q.mina{background:var(--accent)}
+.q.n1{color:#2E8FA8}.q.n2{color:#3F9B5C}.q.n3{color:#D9445C}.q.n4{color:#5B2A86}
+.q.n5{color:#B8572A}.q.n6{color:#1F8A8A}.q.n7{color:#333}.q.n8{color:#888}
+:root[data-theme="dark"] .q.n7{color:#ddd}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .q.n7{color:#ddd}}
+.nivel{display:flex;gap:6px}
+.nivel button{padding:7px 12px}
+.nivel button[aria-pressed="false"]{background:var(--panel);color:var(--fg)}
+#bandeira[aria-pressed="true"]{background:var(--gold);color:#1B2433}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Campo <span>Minado</span></h1>
+    <div class="scores">
+      <div class="score"><small>Minas</small><b id="minas">0</b></div>
+      <div class="score"><small>Tempo</small><b id="tempo">0</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <div class="nivel" role="group" aria-label="Dificuldade">
+      <button data-l="8" data-c="8" data-m="10" aria-pressed="true">Fácil</button>
+      <button data-l="12" data-c="12" data-m="24" aria-pressed="false">Médio</button>
+      <button data-l="14" data-c="14" data-m="40" aria-pressed="false">Difícil</button>
+    </div>
+    <button id="bandeira" class="sec" aria-pressed="false">🚩 Bandeira</button>
+  </div>
+  <div class="palco">
+    <div class="campo" id="campo"></div>
+    <div class="overlay" id="ov" hidden>
+      <h2 id="ovTitulo"></h2>
+      <p id="ovTexto"></p>
+      <button id="denovo">Jogar de novo</button>
+    </div>
+  </div>
+  <p class="ajuda">Clique para abrir • botão direito (ou o modo 🚩) marca bandeira • segure no celular para marcar</p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let L=8, C=8, M=10, cel, primeiro, fim, abertas, bandeiras, seg, relogio, modoBandeira = false;
+
+function viz(i){
+  const r = Math.floor(i/C), c = i%C, out = [];
+  for (let dr=-1;dr<=1;dr++) for (let dc=-1;dc<=1;dc++){
+    if (!dr && !dc) continue;
+    const nr=r+dr, nc=c+dc;
+    if (nr>=0 && nr<L && nc>=0 && nc<C) out.push(nr*C+nc);
+  }
+  return out;
+}
+
+function novo(){
+  clearInterval(relogio); relogio = null;
+  primeiro = true; fim = false; abertas = 0; bandeiras = 0; seg = 0;
+  $('tempo').textContent = 0; $('minas').textContent = M; $('ov').hidden = true;
+  const g = $('campo'); g.innerHTML = ''; g.style.gridTemplateColumns = `repeat(${C},1fr)`;
+  cel = [];
+  for (let i=0;i<L*C;i++){
+    const b = document.createElement('button');
+    b.className = 'q'; b.setAttribute('aria-label','Fechada');
+    let pressao;
+    b.addEventListener('click', () => modoBandeira ? marcar(i) : abrir(i));
+    b.addEventListener('contextmenu', e => { e.preventDefault(); marcar(i); });
+    b.addEventListener('touchstart', () => { pressao = setTimeout(() => { pressao = 'feito'; marcar(i); }, 420); }, {passive:true});
+    b.addEventListener('touchend', e => { if (pressao==='feito') e.preventDefault(); else clearTimeout(pressao); });
+    b.addEventListener('touchmove', () => clearTimeout(pressao), {passive:true});
+    g.appendChild(b);
+    cel.push({b, mina:false, n:0, aberta:false, band:false});
+  }
+}
+
+function plantar(seguro){
+  const proibidas = new Set([seguro, ...viz(seguro)]);
+  let p = 0;
+  while (p < M){
+    const i = Math.floor(Math.random()*L*C);
+    if (cel[i].mina || proibidas.has(i)) continue;
+    cel[i].mina = true; p++;
+  }
+  cel.forEach((c,i) => c.n = viz(i).filter(j => cel[j].mina).length);
+}
+
+function abrir(i){
+  const c = cel[i];
+  if (fim || c.band) return;
+  if (c.aberta){ acorde(i); return; }
+  if (primeiro){
+    primeiro = false; plantar(i);
+    relogio = setInterval(() => $('tempo').textContent = ++seg, 1000);
+  }
+  if (c.mina) return explodir(i);
+  const pilha = [i];
+  while (pilha.length){
+    const k = pilha.pop(), q = cel[k];
+    if (q.aberta || q.band) continue;
+    q.aberta = true; abertas++;
+    q.b.classList.add('aberta');
+    q.b.setAttribute('aria-label', q.n ? `${q.n} minas perto` : 'Vazia');
+    if (q.n){ q.b.textContent = q.n; q.b.classList.add('n'+q.n); }
+    else viz(k).forEach(j => { if (!cel[j].aberta) pilha.push(j); });
+  }
+  if (abertas === L*C - M) vitoria();
+}
+
+// clicar num número com as bandeiras certas abre os vizinhos
+function acorde(i){
+  const vs = viz(i);
+  if (cel[i].n && vs.filter(j => cel[j].band).length === cel[i].n)
+    vs.forEach(j => { if (!cel[j].aberta && !cel[j].band) abrir(j); });
+}
+
+function marcar(i){
+  const c = cel[i];
+  if (fim || c.aberta) return;
+  c.band = !c.band; bandeiras += c.band ? 1 : -1;
+  c.b.textContent = c.band ? '🚩' : '';
+  c.b.setAttribute('aria-label', c.band ? 'Bandeira' : 'Fechada');
+  $('minas').textContent = M - bandeiras;
+}
+
+function explodir(i){
+  fim = true; clearInterval(relogio);
+  cel.forEach((c,k) => {
+    if (c.mina && !c.band){ c.b.textContent = '💣'; c.b.classList.add('aberta'); }
+    if (!c.mina && c.band) c.b.textContent = '❌';
+  });
+  cel[i].b.classList.add('mina');
+  setTimeout(() => {
+    $('ovTitulo').textContent = 'Boom! 💥';
+    $('ovTexto').textContent = 'Você pisou numa mina.';
+    $('ov').hidden = false;
+  }, 900);
+}
+
+function vitoria(){
+  fim = true; clearInterval(relogio);
+  cel.forEach(c => { if (c.mina) c.b.textContent = '🚩'; });
+  $('minas').textContent = 0;
+  const chave = `minado-recorde-${L}x${C}`;
+  let rec = null; try { rec = +localStorage.getItem(chave) || null } catch(e) {}
+  const novoRec = !rec || seg < rec;
+  if (novoRec) try { localStorage.setItem(chave, seg) } catch(e) {}
+  $('ovTitulo').textContent = 'Você venceu! 🎉';
+  $('ovTexto').textContent = `Tempo: ${seg}s` + (novoRec ? ' — novo recorde!' : ` • recorde: ${rec}s`);
+  setTimeout(() => $('ov').hidden = false, 500);
+}
+
+document.querySelectorAll('.nivel button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.nivel button').forEach(x => x.setAttribute('aria-pressed', x===b));
+  L = +b.dataset.l; C = +b.dataset.c; M = +b.dataset.m; novo();
+});
+$('bandeira').onclick = () => { modoBandeira = !modoBandeira; $('bandeira').setAttribute('aria-pressed', modoBandeira); };
+$('denovo').onclick = novo;
+novo();
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Jogos</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+.wrap{max-width:880px;gap:28px}
+.topo{display:flex;flex-direction:column;gap:8px;padding-top:12px}
+.topo h1{font-size:clamp(2.6rem,12vw,4.4rem)}
+.topo p{margin:0;color:var(--muted);font-size:1.05rem;max-width:44ch}
+.lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;list-style:none;margin:0;padding:0}
+.jogo{display:flex;flex-direction:column;background:var(--panel);border-radius:18px;overflow:hidden;text-decoration:none;color:inherit;
+  transition:transform .18s,box-shadow .18s;box-shadow:0 1px 0 rgba(0,0,0,.04)}
+.jogo:hover,.jogo:focus-visible{transform:translateY(-4px);box-shadow:0 12px 28px -12px rgba(27,36,51,.35);outline:none}
+.jogo:focus-visible{box-shadow:0 0 0 3px var(--teal)}
+.arte{aspect-ratio:16/9;display:grid;place-items:center;position:relative;overflow:hidden}
+.info{padding:14px 16px 16px;display:flex;flex-direction:column;gap:4px}
+.info h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0;letter-spacing:-.01em}
+.info p{margin:0;color:var(--muted);font-size:.9rem;line-height:1.4}
+.tag{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--accent)}
+
+/* miniaturas desenhadas em CSS */
+.a2048{background:#C9D2E0}
+.a2048 .g{display:grid;grid-template-columns:repeat(3,38px);gap:6px}
+.a2048 i{width:38px;height:38px;border-radius:6px;display:grid;place-items:center;font:800 .8rem var(--display);font-style:normal;color:#fff}
+.acobra{background:#2E8FA8;background-image:linear-gradient(45deg,rgba(255,255,255,.06) 25%,transparent 25% 75%,rgba(255,255,255,.06) 75%),linear-gradient(45deg,rgba(255,255,255,.06) 25%,transparent 25% 75%,rgba(255,255,255,.06) 75%);background-size:28px 28px;background-position:0 0,14px 14px}
+.acobra .c{display:flex;gap:3px}
+.acobra .c i{width:18px;height:18px;border-radius:5px;background:#7FD1C7}
+.acobra .c i:first-child{background:#3B5BA9}
+.acobra .f{position:absolute;width:16px;height:16px;border-radius:50%;background:#F0657A;right:26%;top:30%}
+.amem{background:#3B5BA9}
+.amem .g{display:grid;grid-template-columns:repeat(4,34px);gap:6px}
+.amem i{width:34px;height:34px;border-radius:7px;background:rgba(255,255,255,.18);display:grid;place-items:center;font-style:normal;font-size:1.1rem}
+.amem i.v{background:#fff}
+.avelha{background:#F3C04F}
+.avelha .g{display:grid;grid-template-columns:repeat(3,30px);gap:5px}
+.avelha i{width:30px;height:30px;border-radius:6px;background:rgba(255,255,255,.45);display:grid;place-items:center;font:800 1.05rem var(--display);font-style:normal}
+.avelha .x{color:#D9445C}.avelha .o{color:#3B5BA9}
+.amina{background:#5D6B82}
+.amina .g{display:grid;grid-template-columns:repeat(6,22px);gap:3px}
+.amina i{width:22px;height:22px;border-radius:4px;background:#3B5BA9;display:grid;place-items:center;font:600 .7rem var(--display);font-style:normal}
+.amina i.a{background:#DCE3ED;color:#2E8FA8}
+.atij{background:#1B2433}
+.atij .g{display:grid;grid-template-columns:repeat(6,30px);gap:4px;position:absolute;top:18%}
+.atij .g i{height:10px;border-radius:3px}
+.atij .b{position:absolute;width:12px;height:12px;border-radius:50%;background:#F0657A;bottom:36%;left:56%}
+.atij .r{position:absolute;width:60px;height:8px;border-radius:4px;background:#E7ECF4;bottom:16%}
+footer{color:var(--muted);font-size:.85rem;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topo">
+    <h1>Jo<span>gos</span></h1>
+    <p>Jogos de navegador feitos com HTML, CSS e JavaScript. Escolha um e divirta-se — funcionam no computador e no celular.</p>
+  </div>
+
+  <ul class="lista">
+    <li><a class="jogo" href="2048.html">
+      <div class="arte a2048" aria-hidden="true"><div class="g">
+        <i style="background:#7FD1C7">8</i><i style="background:#3FB8AF">16</i><i style="background:#2E8FA8">32</i>
+        <i style="background:#3B5BA9">64</i><i style="background:#F3C04F">128</i><i style="background:#F09A3E">256</i>
+        <i style="background:#E86A3A">512</i><i style="background:#D9445C;font-size:.62rem">1024</i><i style="background:#B83280;font-size:.62rem">2048</i>
+      </div></div>
+      <div class="info"><span class="tag">Quebra-cabeça</span><h2>2048</h2><p>Deslize e junte peças iguais até chegar ao 2048.</p></div>
+    </a></li>
+
+    <li><a class="jogo" href="cobrinha.html">
+      <div class="arte acobra" aria-hidden="true"><div class="c"><i></i><i></i><i></i><i></i><i></i></div><span class="f"></span></div>
+      <div class="info"><span class="tag">Arcade</span><h2>Cobrinha</h2><p>Coma as frutas, cresça e não bata no próprio rabo.</p></div>
+    </a></li>
+
+    <li><a class="jogo" href="memoria.html">
+      <div class="arte amem" aria-hidden="true"><div class="g">
+        <i class="v">🦊</i><i></i><i></i><i class="v">🦊</i><i></i><i class="v">🚀</i><i></i><i></i>
+      </div></div>
+      <div class="info"><span class="tag">Memória</span><h2>Jogo da Memória</h2><p>Encontre todos os pares no menor número de jogadas.</p></div>
+    </a></li>
+
+    <li><a class="jogo" href="velha.html">
+      <div class="arte avelha" aria-hidden="true"><div class="g">
+        <i class="x">X</i><i class="o">O</i><i></i><i></i><i class="x">X</i><i class="o">O</i><i></i><i></i><i class="x">X</i>
+      </div></div>
+      <div class="info"><span class="tag">Estratégia</span><h2>Jogo da Velha</h2><p>Contra um amigo ou contra um computador que não perde.</p></div>
+    </a></li>
+
+    <li><a class="jogo" href="campo-minado.html">
+      <div class="arte amina" aria-hidden="true"><div class="g">
+        <i class="a"></i><i class="a">1</i><i></i><i></i><i class="a">1</i><i class="a"></i>
+        <i class="a">1</i><i class="a">2</i><i>🚩</i><i></i><i class="a">1</i><i class="a"></i>
+        <i></i><i></i><i></i><i></i><i class="a">2</i><i class="a">1</i>
+      </div></div>
+      <div class="info"><span class="tag">Lógica</span><h2>Campo Minado</h2><p>Abra o campo usando os números e evite as minas.</p></div>
+    </a></li>
+
+    <li><a class="jogo" href="tijolos.html">
+      <div class="arte atij" aria-hidden="true"><div class="g">
+        <i style="background:#D9445C"></i><i style="background:#D9445C"></i><i style="background:#D9445C"></i><i style="background:#D9445C"></i><i style="background:#D9445C"></i><i style="background:#D9445C"></i>
+        <i style="background:#F09A3E"></i><i style="background:#F09A3E"></i><i></i><i style="background:#F09A3E"></i><i style="background:#F09A3E"></i><i style="background:#F09A3E"></i>
+        <i style="background:#F3C04F"></i><i></i><i></i><i style="background:#F3C04F"></i><i style="background:#F3C04F"></i><i></i>
+      </div><span class="b"></span><span class="r"></span></div>
+      <div class="info"><span class="tag">Arcade</span><h2>Quebra-Tijolos</h2><p>Rebata a bola e destrua todos os tijolos de cada fase.</p></div>
+    </a></li>
+  </ul>
+
+  <footer>Os recordes ficam salvos no seu navegador.</footer>
+</div>
+</body>
+</html>

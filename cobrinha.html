@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cobrinha</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+canvas{display:block;width:100%;aspect-ratio:1;border-radius:14px;background:var(--board);touch-action:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Cobri<span>nha</span></h1>
+    <div class="scores">
+      <div class="score"><small>Pontos</small><b id="pontos">0</b></div>
+      <div class="score"><small>Recorde</small><b id="recorde">0</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <p>Coma as frutas e não bata em si mesma.</p>
+    <button id="pausar" class="sec">Pausar</button>
+  </div>
+  <div class="palco">
+    <canvas id="tela" width="400" height="400"></canvas>
+    <div class="overlay" id="ov">
+      <h2 id="ovTitulo">Cobrinha</h2>
+      <p id="ovTexto">Use as setas, WASD ou deslize o dedo.</p>
+      <button id="iniciar">Jogar</button>
+    </div>
+  </div>
+  <div class="pad" aria-label="Controles">
+    <span></span><button data-d="cima" aria-label="Cima">▲</button><span></span>
+    <button data-d="esq" aria-label="Esquerda">◀</button><button data-d="baixo" aria-label="Baixo">▼</button><button data-d="dir" aria-label="Direita">▶</button>
+  </div>
+  <p class="ajuda">Espaço pausa • a velocidade aumenta a cada 5 frutas</p>
+</div>
+<script>
+const N = 20, tela = document.getElementById('tela'), ctx = tela.getContext('2d');
+const T = tela.width / N;
+const $ = id => document.getElementById(id);
+const DIRS = {cima:[0,-1], baixo:[0,1], esq:[-1,0], dir:[1,0]};
+let cobra, dir, prox, fruta, pontos, vel, timer, rodando = false, pausado = false;
+let recorde = 0;
+try { recorde = +localStorage.getItem('cobrinha-recorde') || 0 } catch(e) {}
+$('recorde').textContent = recorde;
+
+const cor = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function novaFruta(){
+  let p;
+  do { p = [Math.floor(Math.random()*N), Math.floor(Math.random()*N)] }
+  while (cobra.some(s => s[0]===p[0] && s[1]===p[1]));
+  return p;
+}
+
+function iniciar(){
+  cobra = [[10,10],[9,10],[8,10]];
+  dir = prox = 'dir';
+  pontos = 0; vel = 130;
+  fruta = novaFruta();
+  $('pontos').textContent = 0;
+  $('ov').hidden = true;
+  rodando = true; pausado = false;
+  $('pausar').textContent = 'Pausar';
+  clearInterval(timer); timer = setInterval(passo, vel);
+  desenhar();
+}
+
+function passo(){
+  dir = prox;
+  const [dx,dy] = DIRS[dir];
+  const cab = [(cobra[0][0]+dx+N)%N, (cobra[0][1]+dy+N)%N];
+  const comeu = cab[0]===fruta[0] && cab[1]===fruta[1];
+  const corpo = comeu ? cobra : cobra.slice(0,-1);
+  if (corpo.some(s => s[0]===cab[0] && s[1]===cab[1])) return fim();
+  cobra.unshift(cab);
+  if (comeu){
+    pontos++;
+    $('pontos').textContent = pontos;
+    fruta = novaFruta();
+    if (pontos % 5 === 0 && vel > 60){ vel -= 12; clearInterval(timer); timer = setInterval(passo, vel); }
+  } else cobra.pop();
+  desenhar();
+}
+
+function fim(){
+  clearInterval(timer); rodando = false;
+  if (pontos > recorde){
+    recorde = pontos; $('recorde').textContent = recorde;
+    try { localStorage.setItem('cobrinha-recorde', recorde) } catch(e) {}
+  }
+  $('ovTitulo').textContent = 'Fim de jogo';
+  $('ovTexto').textContent = `Você fez ${pontos} ponto${pontos===1?'':'s'}.`;
+  $('iniciar').textContent = 'Jogar de novo';
+  $('ov').hidden = false;
+}
+
+function retan(x,y,w,h,r){ ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
+
+function desenhar(){
+  ctx.clearRect(0,0,tela.width,tela.height);
+  ctx.fillStyle = cor('--cell');
+  for (let x=0;x<N;x++) for (let y=0;y<N;y++) if ((x+y)%2===0) ctx.fillRect(x*T,y*T,T,T);
+  ctx.fillStyle = cor('--accent');
+  ctx.beginPath(); ctx.arc(fruta[0]*T+T/2, fruta[1]*T+T/2, T*.38, 0, Math.PI*2); ctx.fill();
+  cobra.forEach((s,i) => {
+    ctx.fillStyle = i===0 ? cor('--blue') : cor('--teal');
+    retan(s[0]*T+1, s[1]*T+1, T-2, T-2, 5);
+  });
+  // olhos
+  const [hx,hy] = cobra[0], [dx,dy] = DIRS[dir];
+  ctx.fillStyle = '#fff';
+  [-1,1].forEach(k => {
+    const ox = hx*T+T/2 + dx*T*.18 + (dy? k*T*.2 : 0);
+    const oy = hy*T+T/2 + dy*T*.18 + (dx? k*T*.2 : 0);
+    ctx.beginPath(); ctx.arc(ox, oy, T*.1, 0, Math.PI*2); ctx.fill();
+  });
+}
+
+function mudar(d){
+  if (!rodando || pausado) return;
+  const [a,b] = DIRS[d], [c,e] = DIRS[dir];
+  if (a===-c && b===-e) return; // sem meia-volta
+  prox = d;
+}
+
+function pausar(){
+  if (!rodando) return;
+  pausado = !pausado;
+  if (pausado){ clearInterval(timer); $('pausar').textContent = 'Continuar'; }
+  else { timer = setInterval(passo, vel); $('pausar').textContent = 'Pausar'; }
+}
+
+document.addEventListener('keydown', e => {
+  const m = {ArrowUp:'cima',ArrowDown:'baixo',ArrowLeft:'esq',ArrowRight:'dir',w:'cima',s:'baixo',a:'esq',d:'dir'};
+  const k = m[e.key] || m[e.key.toLowerCase()];
+  if (k){ e.preventDefault(); if (!rodando) iniciar(); mudar(k); }
+  if (e.key === ' '){ e.preventDefault(); rodando ? pausar() : iniciar(); }
+});
+document.querySelectorAll('.pad button').forEach(b => b.addEventListener('click', () => mudar(b.dataset.d)));
+$('iniciar').onclick = iniciar;
+$('pausar').onclick = pausar;
+
+let t0 = null;
+tela.addEventListener('touchstart', e => { t0 = e.touches[0]; }, {passive:true});
+tela.addEventListener('touchend', e => {
+  if (!t0) return;
+  const t = e.changedTouches[0], dx = t.clientX - t0.clientX, dy = t.clientY - t0.clientY;
+  if (Math.max(Math.abs(dx),Math.abs(dy)) > 24) mudar(Math.abs(dx) > Math.abs(dy) ? (dx>0?'dir':'esq') : (dy>0?'baixo':'cima'));
+  t0 = null;
+});
+
+cobra = [[10,10],[9,10],[8,10]]; dir = 'dir'; fruta = [15,10];
+desenhar();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', desenhar);
+</script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Jogo da Memória</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+.grade{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(8px,2.4vw,12px);background:var(--board);
+  padding:clamp(8px,2.4vw,12px);border-radius:14px}
+.carta{aspect-ratio:1;perspective:600px;background:none;padding:0;border-radius:10px}
+.carta:active{transform:none}
+.carta .in{position:relative;width:100%;height:100%;transition:transform .35s;transform-style:preserve-3d}
+.carta.virada .in,.carta.par .in{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;border-radius:10px;display:grid;place-items:center;backface-visibility:hidden}
+.verso{background:var(--blue);background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,.18) 0 18%,transparent 19%)}
+.frente{background:var(--panel);transform:rotateY(180deg);font-size:clamp(1.6rem,9vw,2.4rem)}
+.carta.par .frente{background:color-mix(in srgb,var(--teal) 30%,var(--panel))}
+.carta.erro .frente{animation:treme .35s}
+@keyframes treme{25%{translate:-4px}75%{translate:4px}}
+.nivel{display:flex;gap:6px}
+.nivel button{padding:7px 12px}
+.nivel button[aria-pressed="false"]{background:var(--panel);color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Memó<span>ria</span></h1>
+    <div class="scores">
+      <div class="score"><small>Jogadas</small><b id="jogadas">0</b></div>
+      <div class="score"><small>Tempo</small><b id="tempo">0:00</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <div class="nivel" role="group" aria-label="Dificuldade">
+      <button data-n="6" aria-pressed="false">Fácil</button>
+      <button data-n="8" aria-pressed="true">Médio</button>
+      <button data-n="10" aria-pressed="false">Difícil</button>
+    </div>
+    <button id="novo" class="sec">Novo jogo</button>
+  </div>
+  <div class="palco">
+    <div class="grade" id="grade"></div>
+    <div class="overlay" id="ov" hidden>
+      <h2>Parabéns!</h2>
+      <p id="ovTexto"></p>
+      <button id="denovo">Jogar de novo</button>
+    </div>
+  </div>
+  <p class="ajuda">Vire duas cartas por vez e encontre todos os pares.</p>
+</div>
+<script>
+const EMOJIS = ['🍎','🚀','🐙','🌵','🎸','🍕','🦊','⚽','🌙','🎲','🐢','💎'];
+const $ = id => document.getElementById(id);
+let pares = 8, abertas = [], achados = 0, jogadas = 0, seg = 0, relogio = null, travado = false;
+
+function embaralhar(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+function novo(){
+  clearInterval(relogio); relogio = null;
+  abertas = []; achados = 0; jogadas = 0; seg = 0; travado = false;
+  $('jogadas').textContent = 0; $('tempo').textContent = '0:00'; $('ov').hidden = true;
+  const sel = embaralhar(EMOJIS.slice()).slice(0, pares);
+  const cartas = embaralhar([...sel, ...sel]);
+  const g = $('grade');
+  g.style.gridTemplateColumns = `repeat(${pares===10 ? 5 : 4},1fr)`;
+  g.innerHTML = '';
+  cartas.forEach(e => {
+    const b = document.createElement('button');
+    b.className = 'carta'; b.dataset.e = e; b.setAttribute('aria-label','Carta virada');
+    b.innerHTML = `<div class="in"><div class="face verso"></div><div class="face frente">${e}</div></div>`;
+    b.onclick = () => virar(b);
+    g.appendChild(b);
+  });
+}
+
+function fmt(s){ return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
+
+function virar(c){
+  if (travado || c.classList.contains('virada') || c.classList.contains('par')) return;
+  if (!relogio) relogio = setInterval(() => $('tempo').textContent = fmt(++seg), 1000);
+  c.classList.add('virada'); c.setAttribute('aria-label', c.dataset.e);
+  abertas.push(c);
+  if (abertas.length < 2) return;
+  jogadas++; $('jogadas').textContent = jogadas;
+  const [a,b] = abertas;
+  if (a.dataset.e === b.dataset.e){
+    a.classList.add('par'); b.classList.add('par'); abertas = [];
+    if (++achados === pares) vitoria();
+  } else {
+    travado = true;
+    setTimeout(() => { a.classList.add('erro'); b.classList.add('erro'); }, 350);
+    setTimeout(() => {
+      [a,b].forEach(x => { x.classList.remove('virada','erro'); x.setAttribute('aria-label','Carta virada'); });
+      abertas = []; travado = false;
+    }, 950);
+  }
+}
+
+function vitoria(){
+  clearInterval(relogio);
+  const chave = 'memoria-recorde-' + pares;
+  let rec = null;
+  try { rec = JSON.parse(localStorage.getItem(chave)); } catch(e) {}
+  let novoRec = !rec || jogadas < rec.j || (jogadas === rec.j && seg < rec.s);
+  if (novoRec) try { localStorage.setItem(chave, JSON.stringify({j:jogadas,s:seg})); } catch(e) {}
+  $('ovTexto').textContent = `${jogadas} jogadas em ${fmt(seg)}` +
+    (novoRec ? ' — novo recorde!' : ` • recorde: ${rec.j} jogadas`);
+  setTimeout(() => $('ov').hidden = false, 500);
+}
+
+document.querySelectorAll('.nivel button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.nivel button').forEach(x => x.setAttribute('aria-pressed', x===b));
+  pares = +b.dataset.n; novo();
+});
+$('novo').onclick = novo; $('denovo').onclick = novo;
+novo();
+</script>
+</body>
+</html>

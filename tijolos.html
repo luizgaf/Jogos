@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Quebra-Tijolos</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+canvas{display:block;width:100%;aspect-ratio:4/5;border-radius:14px;background:var(--board);touch-action:none;cursor:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Tijo<span>los</span></h1>
+    <div class="scores">
+      <div class="score"><small>Pontos</small><b id="pontos">0</b></div>
+      <div class="score"><small>Vidas</small><b id="vidas">3</b></div>
+      <div class="score"><small>Fase</small><b id="fase">1</b></div>
+    </div>
+  </header>
+  <div class="palco">
+    <canvas id="tela" width="400" height="500"></canvas>
+    <div class="overlay" id="ov">
+      <h2 id="ovTitulo">Quebra-Tijolos</h2>
+      <p id="ovTexto">Mova a raquete com o mouse, o dedo ou as setas.</p>
+      <button id="iniciar">Jogar</button>
+    </div>
+  </div>
+  <p class="ajuda">Clique, toque ou aperte espaço para lançar a bola • recorde: <b id="recorde">0</b></p>
+</div>
+<script>
+const tela = document.getElementById('tela'), ctx = tela.getContext('2d');
+const W = tela.width, H = tela.height, $ = id => document.getElementById(id);
+const COLS = 8, BW = (W - 20) / COLS, BH = 18;
+const CORES = ['--accent','--orange','--gold','--teal','--blue','--purple'];
+const cor = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+let rq, bola, tijolos, pontos, vidas, fase, presa, jogando = false, teclas = {}, ultimo = 0;
+let recorde = 0; try { recorde = +localStorage.getItem('tijolos-recorde') || 0 } catch(e) {}
+$('recorde').textContent = recorde;
+
+function montarFase(){
+  tijolos = [];
+  const linhas = Math.min(4 + fase, 8);
+  for (let r=0;r<linhas;r++) for (let c=0;c<COLS;c++){
+    const duro = fase > 1 && r < fase - 1 && r < 3;
+    tijolos.push({x:10 + c*BW, y:50 + r*(BH+6), vida: duro ? 2 : 1, cor: CORES[r % CORES.length]});
+  }
+}
+
+function prenderBola(){
+  presa = true;
+  const v = 4.2 + fase*0.4;
+  bola = {x: rq.x + rq.w/2, y: rq.y - 8, r: 7, vx: 0, vy: 0, v};
+}
+
+function iniciar(){
+  pontos = 0; vidas = 3; fase = 1;
+  rq = {x: W/2 - 40, y: H - 30, w: 80, h: 12};
+  montarFase(); prenderBola(); atualizarHud();
+  $('ov').hidden = true; jogando = true;
+  ultimo = performance.now(); requestAnimationFrame(laco);
+}
+
+function lancar(){
+  if (!jogando || !presa) return;
+  presa = false;
+  const ang = (-Math.PI/2) + (Math.random()*0.6 - 0.3);
+  bola.vx = Math.cos(ang)*bola.v; bola.vy = Math.sin(ang)*bola.v;
+}
+
+function atualizarHud(){ $('pontos').textContent = pontos; $('vidas').textContent = vidas; $('fase').textContent = fase; }
+
+function laco(t){
+  if (!jogando) return;
+  const dt = Math.min((t - ultimo) / 16.67, 2.5); ultimo = t;
+  if (teclas.ArrowLeft || teclas.a) rq.x -= 7*dt;
+  if (teclas.ArrowRight || teclas.d) rq.x += 7*dt;
+  rq.x = Math.max(0, Math.min(W - rq.w, rq.x));
+
+  if (presa){ bola.x = rq.x + rq.w/2; bola.y = rq.y - bola.r - 1; }
+  else {
+    // subpassos evitam a bola atravessar tijolos
+    const passos = 3;
+    for (let s=0; s<passos && jogando; s++) mover(dt/passos);
+  }
+  desenhar();
+  if (jogando) requestAnimationFrame(laco);
+}
+
+function mover(dt){
+  bola.x += bola.vx*dt; bola.y += bola.vy*dt;
+  if (bola.x < bola.r){ bola.x = bola.r; bola.vx = Math.abs(bola.vx); }
+  if (bola.x > W - bola.r){ bola.x = W - bola.r; bola.vx = -Math.abs(bola.vx); }
+  if (bola.y < bola.r){ bola.y = bola.r; bola.vy = Math.abs(bola.vy); }
+
+  // raquete: o ponto de contato define o ângulo
+  if (bola.vy > 0 && bola.y + bola.r >= rq.y && bola.y - bola.r <= rq.y + rq.h && bola.x >= rq.x - bola.r && bola.x <= rq.x + rq.w + bola.r){
+    const rel = ((bola.x - rq.x) / rq.w - 0.5) * 2; // -1..1
+    const ang = rel * (Math.PI/3);
+    bola.vx = Math.sin(ang)*bola.v; bola.vy = -Math.cos(ang)*bola.v;
+    bola.y = rq.y - bola.r;
+  }
+
+  for (const b of tijolos){
+    if (b.vida <= 0) continue;
+    const cx = Math.max(b.x, Math.min(bola.x, b.x + BW - 4));
+    const cy = Math.max(b.y, Math.min(bola.y, b.y + BH));
+    const dx = bola.x - cx, dy = bola.y - cy;
+    if (dx*dx + dy*dy <= bola.r*bola.r){
+      if (Math.abs(dx) > Math.abs(dy)) bola.vx = dx > 0 ? Math.abs(bola.vx) : -Math.abs(bola.vx);
+      else bola.vy = dy > 0 ? Math.abs(bola.vy) : -Math.abs(bola.vy);
+      b.vida--; pontos += b.vida ? 5 : 10; atualizarHud();
+      break;
+    }
+  }
+
+  if (tijolos.every(b => b.vida <= 0)){
+    fase++; pontos += 50; atualizarHud();
+    montarFase(); prenderBola();
+  }
+
+  if (bola.y - bola.r > H){
+    vidas--; atualizarHud();
+    if (vidas <= 0) return fim();
+    prenderBola();
+  }
+}
+
+function fim(){
+  jogando = false;
+  if (pontos > recorde){
+    recorde = pontos; $('recorde').textContent = recorde;
+    try { localStorage.setItem('tijolos-recorde', recorde) } catch(e) {}
+  }
+  desenhar();
+  $('ovTitulo').textContent = 'Fim de jogo';
+  $('ovTexto').textContent = `${pontos} pontos • chegou à fase ${fase}`;
+  $('iniciar').textContent = 'Jogar de novo';
+  $('ov').hidden = false;
+}
+
+function desenhar(){
+  ctx.clearRect(0,0,W,H);
+  for (const b of tijolos){
+    if (b.vida <= 0) continue;
+    ctx.globalAlpha = b.vida === 2 ? 1 : 0.88;
+    ctx.fillStyle = cor(b.cor);
+    ctx.beginPath(); ctx.roundRect(b.x + 2, b.y, BW - 4, BH, 4); ctx.fill();
+    if (b.vida === 2){ ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2; ctx.stroke(); }
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = cor('--fg');
+  ctx.beginPath(); ctx.roundRect(rq.x, rq.y, rq.w, rq.h, 6); ctx.fill();
+  ctx.fillStyle = cor('--accent');
+  ctx.beginPath(); ctx.arc(bola.x, bola.y, bola.r, 0, Math.PI*2); ctx.fill();
+  if (presa && jogando){
+    ctx.fillStyle = cor('--muted'); ctx.font = '600 15px Figtree, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Toque ou aperte espaço para lançar', W/2, H/2 + 60);
+  }
+}
+
+function moverPara(clientX){
+  const r = tela.getBoundingClientRect();
+  rq.x = Math.max(0, Math.min(W - rq.w, (clientX - r.left) * (W / r.width) - rq.w/2));
+}
+tela.addEventListener('mousemove', e => jogando && moverPara(e.clientX));
+tela.addEventListener('touchmove', e => { if (jogando){ e.preventDefault(); moverPara(e.touches[0].clientX); } }, {passive:false});
+tela.addEventListener('touchstart', e => { if (jogando){ moverPara(e.touches[0].clientX); lancar(); } }, {passive:true});
+tela.addEventListener('click', lancar);
+document.addEventListener('keydown', e => {
+  teclas[e.key] = true;
+  if (e.key === ' ' ){ e.preventDefault(); jogando ? lancar() : iniciar(); }
+  if (e.key.startsWith('Arrow')) e.preventDefault();
+});
+document.addEventListener('keyup', e => teclas[e.key] = false);
+$('iniciar').onclick = iniciar;
+
+rq = {x: W/2 - 40, y: H - 30, w: 80, h: 12}; fase = 1; montarFase(); prenderBola(); desenhar();
+</script>
+</body>
+</html>
