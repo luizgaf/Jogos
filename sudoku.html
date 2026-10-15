@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sudoku</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+.wrap{max-width:480px}
+.grade{display:grid;grid-template-columns:repeat(9,1fr);background:var(--fg);gap:1px;border:3px solid var(--fg);border-radius:10px;overflow:hidden;user-select:none}
+.q{aspect-ratio:1;background:var(--panel);display:grid;place-items:center;position:relative;cursor:pointer;
+  font-family:var(--display);font-weight:600;font-size:clamp(1rem,5.4vw,1.6rem);color:var(--blue)}
+.q.dado{color:var(--fg);font-weight:800}
+.q:nth-child(9n+3),.q:nth-child(9n+6){margin-right:2px}
+.linha3{margin-bottom:2px}
+.q.viz{background:color-mix(in srgb,var(--blue) 9%,var(--panel))}
+.q.igual{background:color-mix(in srgb,var(--blue) 24%,var(--panel))}
+.q.sel{background:color-mix(in srgb,var(--gold) 55%,var(--panel))}
+.q.erro{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--panel))}
+.q.ok{animation:ok .5s}
+@keyframes ok{50%{background:color-mix(in srgb,var(--teal) 45%,var(--panel))}}
+.notas{position:absolute;inset:2px;display:grid;grid-template-columns:repeat(3,1fr);font-family:var(--body);font-weight:600;font-size:clamp(.45rem,2.2vw,.7rem);color:var(--muted)}
+.notas span{display:grid;place-items:center}
+.teclas{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+.teclas button{background:var(--panel);color:var(--fg);padding:10px 0;font-family:var(--display);font-size:1.15rem;position:relative}
+.teclas button.acabou{opacity:.3}
+.acoes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.acoes button{background:var(--panel);color:var(--fg);padding:9px 0}
+#notas[aria-pressed="true"]{background:var(--gold);color:#1B2433}
+.nivel{display:flex;gap:6px}
+.nivel button{padding:7px 12px}
+.nivel button[aria-pressed="false"]{background:var(--panel);color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Su<span>doku</span></h1>
+    <div class="scores">
+      <div class="score"><small>Erros</small><b id="erros">0/3</b></div>
+      <div class="score"><small>Tempo</small><b id="tempo">0:00</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <div class="nivel" role="group" aria-label="Dificuldade">
+      <button data-n="40" aria-pressed="true">Fácil</button>
+      <button data-n="32" aria-pressed="false">Médio</button>
+      <button data-n="26" aria-pressed="false">Difícil</button>
+    </div>
+    <button id="novo" class="sec">Novo jogo</button>
+  </div>
+  <div class="palco">
+    <div class="grade" id="grade"></div>
+    <div class="overlay" id="ov" hidden>
+      <h2 id="ovTitulo"></h2>
+      <p id="ovTexto"></p>
+      <button id="denovo">Novo jogo</button>
+    </div>
+  </div>
+  <div class="teclas" id="teclas"></div>
+  <div class="acoes">
+    <button id="desfazer">↶ Desfazer</button>
+    <button id="apagar">⌫ Apagar</button>
+    <button id="notas" aria-pressed="false">✎ Notas</button>
+  </div>
+  <p class="ajuda">Preencha cada linha, coluna e bloco 3×3 com os números de 1 a 9.<br>Teclado: setas movem, 1–9 escrevem, N alterna notas.</p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let sol, val, dado, notas, selI = -1, erros, seg, relogio, fim, modoNotas = false, pistas = 40, hist = [];
+const qs = [];
+
+for (let i=0;i<81;i++){
+  const d = document.createElement('div'); d.className = 'q';
+  if (Math.floor(i/9)===2 || Math.floor(i/9)===5) d.classList.add('linha3');
+  d.onclick = () => { selI = i; desenhar(); };
+  $('grade').appendChild(d); qs.push(d);
+}
+for (let n=1;n<=9;n++){ const b = document.createElement('button'); b.textContent = n; b.onclick = () => escrever(n); $('teclas').appendChild(b); }
+
+const lin = i => Math.floor(i/9), col = i => i%9, blo = i => Math.floor(lin(i)/3)*3 + Math.floor(col(i)/3);
+const vizinhos = i => { const s=[]; for (let j=0;j<81;j++) if (j!==i && (lin(j)===lin(i)||col(j)===col(i)||blo(j)===blo(i))) s.push(j); return s; };
+const VIZ = Array.from({length:81}, (_,i) => vizinhos(i));
+const pode = (g, i, n) => VIZ[i].every(j => g[j] !== n);
+const embaralha = a => { for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+
+function preencher(g, i=0){
+  if (i===81) return true;
+  if (g[i]) return preencher(g, i+1);
+  for (const n of embaralha([1,2,3,4,5,6,7,8,9])){ if (pode(g,i,n)){ g[i]=n; if (preencher(g,i+1)) return true; } }
+  g[i] = 0; return false;
+}
+
+function contar(g, lim=2){
+  let i = g.indexOf(0); if (i<0) return 1;
+  // escolhe a casa com menos opções para acelerar
+  let melhor = 10;
+  for (let k=0;k<81;k++) if (!g[k]){ let c=0; for (let n=1;n<=9;n++) if (pode(g,k,n)) c++; if (c<melhor){ melhor=c; i=k; if (c<=1) break; } }
+  let tot = 0;
+  for (let n=1;n<=9 && tot<lim;n++) if (pode(g,i,n)){ g[i]=n; tot += contar(g, lim-tot); g[i]=0; }
+  return tot;
+}
+
+function gerar(alvo){
+  const s = Array(81).fill(0); preencher(s);
+  const p = s.slice();
+  let restantes = 81;
+  for (const i of embaralha([...Array(81).keys()])){
+    if (restantes <= alvo) break;
+    const v = p[i]; p[i] = 0;
+    if (contar(p.slice()) !== 1) p[i] = v; else restantes--;
+  }
+  return {s, p};
+}
+
+function foto(){ return {val: val.slice(), notas: notas.map(x => new Set(x)), sel: selI}; }
+
+function fmt(s){ return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
+
+function novo(){
+  const {s, p} = gerar(pistas);
+  sol = s; val = p.slice(); dado = p.map(Boolean); notas = Array.from({length:81}, () => new Set());
+  erros = 0; seg = 0; fim = false; hist = []; selI = p.indexOf(0);
+  clearInterval(relogio); relogio = setInterval(() => { if (!fim && !document.hidden) $('tempo').textContent = fmt(++seg); }, 1000);
+  $('tempo').textContent = '0:00'; $('erros').textContent = '0/3'; $('ov').hidden = true;
+  desenhar();
+}
+
+function desenhar(){
+  const v = selI>=0 ? val[selI] : 0;
+  for (let i=0;i<81;i++){
+    const d = qs[i];
+    d.className = 'q' + (lin(i)===2||lin(i)===5 ? ' linha3' : '');
+    if (dado[i]) d.classList.add('dado');
+    if (selI>=0 && VIZ[selI].includes(i)) d.classList.add('viz');
+    if (v && val[i]===v) d.classList.add('igual');
+    if (i===selI) d.classList.add('sel');
+    if (val[i] && val[i]!==sol[i]) d.classList.add('erro');
+    if (val[i]) d.textContent = val[i];
+    else d.innerHTML = notas[i].size ? '<div class="notas">' + [1,2,3,4,5,6,7,8,9].map(n => `<span>${notas[i].has(n)?n:''}</span>`).join('') + '</div>' : '';
+  }
+  [...$('teclas').children].forEach((b,k) => b.classList.toggle('acabou', val.filter((x,i)=>x===k+1 && x===sol[i]).length===9));
+}
+
+function escrever(n){
+  if (fim || selI<0 || dado[selI]) return;
+  const i = selI;
+  if (modoNotas && val[i]) return;
+  hist.push(foto());
+  if (modoNotas){
+    notas[i].has(n) ? notas[i].delete(n) : notas[i].add(n);
+    return desenhar();
+  }
+  val[i] = val[i]===n ? 0 : n;
+  if (val[i]){
+    VIZ[i].forEach(j => notas[j].delete(n));
+    if (n !== sol[i]){
+      erros++; $('erros').textContent = `${erros}/3`;
+      if (erros >= 3){ desenhar(); return acabar(false); }
+    }
+  }
+  desenhar();
+  if (val[i] === sol[i]) checarGrupos(i);
+  if (val.every((x,k) => x===sol[k])) acabar(true);
+}
+
+function checarGrupos(i){
+  const grupos = [k=>lin(k)===lin(i), k=>col(k)===col(i), k=>blo(k)===blo(i)];
+  grupos.forEach(f => {
+    const ids = [...Array(81).keys()].filter(f);
+    if (ids.every(k => val[k]===sol[k])) ids.forEach((k,x) => setTimeout(() => { qs[k].classList.remove('ok'); void qs[k].offsetWidth; qs[k].classList.add('ok'); }, x*30));
+  });
+}
+
+function desfazer(){
+  if (fim) return;
+  const h = hist.pop(); if (!h) return;
+  val = h.val; notas = h.notas; selI = h.sel; desenhar();
+}
+
+function apagar(){
+  if (fim || selI<0 || dado[selI]) return;
+  hist.push(foto());
+  val[selI] = 0; notas[selI].clear(); desenhar();
+}
+
+function acabar(venceu){
+  fim = true; clearInterval(relogio);
+  const chave = 'sudoku-recorde-' + pistas;
+  let rec = null; try { rec = +localStorage.getItem(chave) || null } catch(e) {}
+  const novoRec = venceu && (!rec || seg < rec);
+  if (novoRec) try { localStorage.setItem(chave, seg) } catch(e) {}
+  $('ovTitulo').textContent = venceu ? 'Resolvido! 🎉' : 'Fim de jogo';
+  $('ovTexto').textContent = venceu ? `Tempo: ${fmt(seg)}` + (novoRec ? ' — novo recorde!' : rec ? ` • recorde ${fmt(rec)}` : '') : 'Você cometeu 3 erros.';
+  setTimeout(() => $('ov').hidden = false, venceu ? 700 : 300);
+}
+
+function alternarNotas(){ modoNotas = !modoNotas; $('notas').setAttribute('aria-pressed', modoNotas); }
+
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey) { if (e.key==='z'){ e.preventDefault(); desfazer(); } return; }
+  const mov = {ArrowUp:-9, ArrowDown:9, ArrowLeft:-1, ArrowRight:1}[e.key];
+  if (mov){ e.preventDefault(); selI = selI<0 ? 0 : (selI + mov + 81) % 81; desenhar(); return; }
+  if (/^[1-9]$/.test(e.key)) escrever(+e.key);
+  if (e.key==='Backspace' || e.key==='Delete' || e.key==='0') apagar();
+  if (e.key==='n' || e.key==='N') alternarNotas();
+});
+$('apagar').onclick = apagar; $('desfazer').onclick = desfazer; $('notas').onclick = alternarNotas;
+document.querySelectorAll('.nivel button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.nivel button').forEach(x => x.setAttribute('aria-pressed', x===b));
+  pistas = +b.dataset.n; novo();
+});
+$('novo').onclick = novo; $('denovo').onclick = novo;
+novo();
+</script>
+</body>
+</html>

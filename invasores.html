@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Invasores</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+canvas{display:block;width:100%;aspect-ratio:4/5;border-radius:14px;background:#0E1320;touch-action:none}
+.controles{display:none;grid-template-columns:1fr 1fr 1.4fr;gap:8px}
+.controles button{background:var(--panel);color:var(--fg);padding:14px 0;font-size:1.2rem}
+.controles button.fogo{background:var(--accent);color:#fff}
+@media (hover:none) and (pointer:coarse){.controles{display:grid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Invaso<span>res</span></h1>
+    <div class="scores">
+      <div class="score"><small>Pontos</small><b id="pontos">0</b></div>
+      <div class="score"><small>Onda</small><b id="onda">1</b></div>
+    </div>
+  </header>
+  <div class="palco">
+    <canvas id="tela" width="400" height="500"></canvas>
+    <div class="overlay" id="ov">
+      <h2 id="ovTitulo">Invasores</h2>
+      <p id="ovTexto">Defenda o planeta das ondas de alienígenas.</p>
+      <button id="iniciar">Jogar</button>
+    </div>
+  </div>
+  <div class="controles" aria-label="Controles">
+    <button data-k="ArrowLeft" aria-label="Esquerda">◀</button>
+    <button data-k="ArrowRight" aria-label="Direita">▶</button>
+    <button data-k=" " class="fogo" aria-label="Atirar">Atirar</button>
+  </div>
+  <p class="ajuda">← → movem • espaço atira • P pausa • recorde: <b id="recorde">0</b></p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const tela = $('tela'), ctx = tela.getContext('2d'), W = tela.width, H = tela.height;
+// sprites originais (2 quadros de animação cada)
+const SPR = {
+  lula:  [['..XX..XX..','.XXXXXXXX.','XX.XXXX.XX','XXXXXXXXXX','..X.XX.X..','.X......X.'],
+          ['..XX..XX..','.XXXXXXXX.','XX.XXXX.XX','XXXXXXXXXX','.X.X..X.X.','X........X']],
+  besouro:[['X..XXXX..X','.XXXXXXXX.','XXX.XX.XXX','XXXXXXXXXX','.XX.XX.XX.','..X....X..'],
+          ['...XXXX...','XXXXXXXXXX','XXX.XX.XXX','XXXXXXXXXX','.XX.XX.XX.','X..X..X..X']],
+  olho:  [['...XXXX...','.XXXXXXXX.','XXX.XX.XXX','XXXXXXXXXX','.X.XXXX.X.','X........X'],
+          ['...XXXX...','.XXXXXXXX.','XXXX..XXXX','XXXXXXXXXX','..XXXXXX..','.X.X..X.X.']],
+  disco: [['....XXXXXX....','..XXXXXXXXXX..','.XX.XX.XX.XX.X','XXXXXXXXXXXXXX','..XX..XX..XX..']],
+  nave:  [['......X......','.....XXX.....','.....XXX.....','.XXXXXXXXXXX.','XXXXXXXXXXXXX','XXX.XXXXX.XXX']]
+};
+const PX = 3;
+let jog, aliens, tirosA, tiroJ, abrigos, disco, dir, passoT, quadro, pontos, vidas, onda, estado = 'menu', teclas = {}, ultimo = 0, recarga = 0, explosoes = [];
+let recorde = 0; try { recorde = +localStorage.getItem('invasores-recorde') || 0 } catch(e) {}
+$('recorde').textContent = recorde;
+
+function sprite(s, x, y, cor, px=PX){
+  ctx.fillStyle = cor;
+  s.forEach((l, r) => [...l].forEach((ch, c) => { if (ch==='X') ctx.fillRect(x + c*px, y + r*px, px, px); }));
+}
+
+function montarOnda(){
+  aliens = [];
+  const tipos = [['olho',30,'#F0657A'],['besouro',20,'#F3C04F'],['besouro',20,'#F3C04F'],['lula',10,'#7FD1C7'],['lula',10,'#7FD1C7']];
+  const topo = 60 + Math.min(onda-1, 5) * 12;
+  tipos.forEach(([t, pts, cor], r) => { for (let c=0;c<9;c++) aliens.push({x: 30 + c*36, y: topo + r*30, t, pts, cor, vivo: true}); });
+  dir = 1; passoT = 0; tirosA = []; tiroJ = null; disco = null;
+  abrigos = [];
+  [0,1,2,3].forEach(k => {
+    const bx = 38 + k*92;
+    for (let r=0;r<6;r++) for (let c=0;c<11;c++){
+      if ((r===0 && (c<2||c>8)) || (r>=4 && c>=3 && c<=7)) continue;
+      abrigos.push({x: bx + c*4, y: H - 110 + r*4});
+    }
+  });
+}
+
+function iniciar(){
+  jog = {x: W/2 - 20, y: H - 40}; pontos = 0; vidas = 3; onda = 1; explosoes = [];
+  montarOnda(); hud(); $('ov').hidden = true; estado = 'jogando';
+  ultimo = performance.now(); requestAnimationFrame(laco);
+}
+function hud(){ $('pontos').textContent = pontos; $('onda').textContent = onda; }
+
+function intervalo(){ const vivos = aliens.filter(a=>a.vivo).length; return Math.max(40, 30 + vivos * 13 - onda * 20); }
+
+function laco(t){
+  if (estado !== 'jogando' && estado !== 'pausa') return;
+  const ms = Math.min(t - ultimo, 50), dt = ms / 16.67; ultimo = t;
+  if (estado === 'jogando') atualizar(ms, dt);
+  desenhar();
+  requestAnimationFrame(laco);
+}
+
+const colide = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+function atualizar(ms, dt){
+  if (teclas.ArrowLeft || teclas.a) jog.x -= 4*dt;
+  if (teclas.ArrowRight || teclas.d) jog.x += 4*dt;
+  jog.x = Math.max(4, Math.min(W - 43, jog.x));
+  recarga -= ms;
+  if ((teclas[' ']) && !tiroJ && recarga <= 0){ tiroJ = {x: jog.x + 19, y: jog.y - 4, w: 3, h: 10}; recarga = 250; }
+
+  // aliens marcham em passos, mais rápido quando restam poucos
+  passoT += ms;
+  if (passoT > intervalo()){
+    passoT = 0; quadro = (quadro + 1) % 2;
+    const vivos = aliens.filter(a=>a.vivo);
+    const borda = vivos.some(a => (dir>0 && a.x + 30 + 8 > W) || (dir<0 && a.x - 8 < 0));
+    if (borda){ dir *= -1; vivos.forEach(a => a.y += 14); }
+    else vivos.forEach(a => a.x += 8*dir);
+    // alien da frente de uma coluna atira
+    if (Math.random() < 0.35 + onda*0.05){
+      const cols = {}; vivos.forEach(a => { const k = Math.round(a.x); if (!cols[k] || a.y > cols[k].y) cols[k] = a; });
+      const frente = Object.values(cols), a = frente[Math.floor(Math.random()*frente.length)];
+      if (a && tirosA.length < 3 + onda) tirosA.push({x: a.x + 14, y: a.y + 18, w: 3, h: 10, v: 3 + onda*0.3});
+    }
+  }
+
+  if (!disco && Math.random() < 0.0015*dt){ const esq = Math.random() < .5; disco = {x: esq ? -45 : W+5, vx: esq ? 1.6 : -1.6, y: 30, w: 42, h: 15, pts: [50,100,150,300][Math.floor(Math.random()*4)]}; }
+  if (disco){ disco.x += disco.vx*dt; if (disco.x < -50 || disco.x > W+50) disco = null; }
+
+  if (tiroJ){
+    tiroJ.y -= 8*dt;
+    if (tiroJ.y < 0) tiroJ = null;
+    else {
+      for (const a of aliens) if (a.vivo && colide(tiroJ, {x:a.x, y:a.y, w:30, h:18})){
+        a.vivo = false; pontos += a.pts; hud(); explosoes.push({x:a.x+15, y:a.y+9, t:300, cor:a.cor}); tiroJ = null; break;
+      }
+      if (tiroJ && disco && colide(tiroJ, disco)){ pontos += disco.pts; hud(); explosoes.push({x:disco.x+21, y:disco.y+7, t:600, cor:'#F0657A', txt:disco.pts}); disco = null; tiroJ = null; }
+      if (tiroJ){ const k = abrigos.findIndex(b => colide(tiroJ, {x:b.x, y:b.y, w:4, h:4})); if (k>=0){ abrigos.splice(k,1); tiroJ = null; } }
+    }
+  }
+
+  for (let i=tirosA.length-1;i>=0;i--){
+    const s = tirosA[i]; s.y += s.v*dt;
+    const k = abrigos.findIndex(b => colide(s, {x:b.x, y:b.y, w:4, h:4}));
+    if (k>=0){ abrigos.splice(k,1); if (abrigos[k] && Math.abs(abrigos[k].x - s.x) < 6) abrigos.splice(k,1); tirosA.splice(i,1); continue; }
+    if (colide(s, {x:jog.x+2, y:jog.y+4, w:35, h:14})){ tirosA.splice(i,1); return morrer(); }
+    if (s.y > H) tirosA.splice(i,1);
+  }
+
+  // aliens destroem abrigos ao encostar e invadem ao chegar no chão
+  for (const a of aliens){
+    if (!a.vivo) continue;
+    if (a.y + 18 > H - 112) abrigos = abrigos.filter(b => !colide({x:a.x, y:a.y, w:30, h:18}, {x:b.x, y:b.y, w:4, h:4}));
+    if (a.y + 18 >= jog.y){ vidas = 0; return morrer(); }
+  }
+  explosoes.forEach(e => e.t -= ms); explosoes = explosoes.filter(e => e.t > 0);
+
+  if (aliens.every(a => !a.vivo)){ onda++; pontos += 100; hud(); montarOnda(); }
+}
+
+function morrer(){
+  vidas--;
+  explosoes.push({x: jog.x+20, y: jog.y+9, t: 700, cor: '#3FB8AF'});
+  if (vidas <= 0) return fim();
+  tirosA = []; estado = 'pausa';
+  setTimeout(() => { if (estado === 'pausa'){ jog.x = W/2 - 20; estado = 'jogando'; } }, 900);
+}
+
+function fim(){
+  estado = 'fim'; desenhar();
+  if (pontos > recorde){ recorde = pontos; $('recorde').textContent = recorde; try { localStorage.setItem('invasores-recorde', recorde) } catch(e) {} }
+  $('ovTitulo').textContent = 'Planeta invadido';
+  $('ovTexto').textContent = `${pontos} pontos • onda ${onda}`;
+  $('iniciar').textContent = 'Jogar de novo';
+  setTimeout(() => $('ov').hidden = false, 500);
+}
+
+const estrelas = Array.from({length:50}, () => ({x: Math.random()*W, y: Math.random()*H, s: Math.random()*1.5 + .3}));
+
+function desenhar(){
+  ctx.fillStyle = '#0E1320'; ctx.fillRect(0,0,W,H);
+  estrelas.forEach(e => { ctx.globalAlpha = .3 + e.s*.3; ctx.fillStyle = '#fff'; ctx.fillRect(e.x, e.y, e.s, e.s); }); ctx.globalAlpha = 1;
+  if (!aliens) return;
+  aliens.forEach(a => { if (a.vivo) sprite(SPR[a.t][quadro % SPR[a.t].length], a.x, a.y, a.cor); });
+  ctx.fillStyle = '#3F9B5C'; abrigos.forEach(b => ctx.fillRect(b.x, b.y, 4, 4));
+  if (disco) sprite(SPR.disco[0], disco.x, disco.y, '#F0657A');
+  if (estado !== 'pausa' || Math.floor(performance.now()/120)%2) sprite(SPR.nave[0], jog.x, jog.y, '#3FB8AF');
+  ctx.fillStyle = '#fff'; if (tiroJ) ctx.fillRect(tiroJ.x, tiroJ.y, tiroJ.w, tiroJ.h);
+  ctx.fillStyle = '#F3C04F';
+  tirosA.forEach(s => { const z = Math.floor(s.y/6)%2 ? 2 : 0; ctx.fillRect(s.x + z - 1, s.y, 3, 4); ctx.fillRect(s.x - z + 1, s.y + 5, 3, 5); });
+  explosoes.forEach(e => {
+    ctx.fillStyle = e.cor; ctx.globalAlpha = Math.min(1, e.t/200);
+    if (e.txt){ ctx.font = '600 14px Figtree, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(e.txt, e.x, e.y + 5); }
+    else for (let k=0;k<8;k++){ const ang = k*Math.PI/4, d = 14 - e.t/40; ctx.fillRect(e.x + Math.cos(ang)*d - 2, e.y + Math.sin(ang)*d - 2, 4, 4); }
+    ctx.globalAlpha = 1;
+  });
+  ctx.fillStyle = '#3F9B5C'; ctx.fillRect(0, H - 14, W, 2);
+  for (let v=0; v<vidas-1; v++) sprite(SPR.nave[0], 10 + v*34, H - 10, '#3FB8AF', 2);
+}
+
+document.addEventListener('keydown', e => {
+  teclas[e.key] = true;
+  if (e.key===' ' || e.key.startsWith('Arrow')) e.preventDefault();
+  if (e.key===' ' && (estado==='menu' || estado==='fim') && !$('ov').hidden) iniciar();
+  if ((e.key==='p'||e.key==='P') && (estado==='jogando'||estado==='parado')){ estado = estado==='jogando' ? 'parado' : 'jogando'; if (estado==='jogando'){ ultimo = performance.now(); requestAnimationFrame(laco); } else desenharPausa(); }
+});
+document.addEventListener('keyup', e => teclas[e.key] = false);
+function desenharPausa(){ desenhar(); ctx.fillStyle = 'rgba(14,19,32,.6)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#fff'; ctx.font='800 28px Unbounded, sans-serif'; ctx.textAlign='center'; ctx.fillText('PAUSA', W/2, H/2); }
+document.querySelectorAll('.controles button').forEach(b => {
+  b.addEventListener('pointerdown', e => { e.preventDefault(); teclas[b.dataset.k] = true; });
+  ['pointerup','pointerleave','pointercancel'].forEach(ev => b.addEventListener(ev, () => teclas[b.dataset.k] = false));
+});
+$('iniciar').onclick = iniciar;
+quadro = 0; onda = 1; vidas = 3; jog = {x: W/2 - 20, y: H - 40}; montarOnda(); desenhar();
+</script>
+</body>
+</html>

@@ -70,6 +70,29 @@
 .alig .g{display:grid;grid-template-columns:repeat(7,18px);gap:4px;background:#3B5BA9;padding:6px;border-radius:8px}
 .alig i{width:18px;height:18px;border-radius:50%;background:#E7ECF4}
 .alig i.r{background:#D9445C}.alig i.a{background:#F3C04F}
+.adam{background:#6B4A2E}
+.adam .g{display:grid;grid-template-columns:repeat(6,22px);border:4px solid #4A3320;border-radius:4px}
+.adam i{width:22px;height:22px;background:#EAD9B5;display:grid;place-items:center}
+.adam i.e{background:#9C7148}
+.adam i b{width:16px;height:16px;border-radius:50%;display:block}
+.adam i b.w{background:#F2EEE6}.adam i b.k{background:#2A3040}
+.asud{background:#DCE3ED}
+.asud .g{display:grid;grid-template-columns:repeat(6,22px);gap:1px;background:#1B2433;border:2px solid #1B2433;border-radius:4px}
+.asud i{width:22px;height:22px;background:#fff;display:grid;place-items:center;font:800 .72rem var(--display);font-style:normal;color:#1B2433}
+.asud i.u{color:#3B5BA9;font-weight:600}.asud i.s{background:#F8E2A6}
+.ainv{background:#0E1320}
+.ainv .al{position:absolute;display:grid;grid-template-columns:repeat(5,26px);gap:8px 10px;top:20%}
+.ainv .al i{height:16px;border-radius:8px 8px 3px 3px;background-image:radial-gradient(circle at 32% 50%,#0E1320 2.5px,transparent 3px),radial-gradient(circle at 68% 50%,#0E1320 2.5px,transparent 3px)}
+.ainv .nv{position:absolute;bottom:14%;width:34px;height:14px;background:#3FB8AF;clip-path:polygon(50% 0,60% 35%,100% 55%,100% 100%,0 100%,0 55%,40% 35%)}
+.ainv .tr{position:absolute;bottom:32%;width:3px;height:10px;background:#fff}
+.afor{background:#F0657A}
+.afor svg{width:84px;height:84px;color:#1B2433}
+.afor .ps{position:absolute;bottom:16%;display:flex;gap:5px}
+.afor .ps i{width:16px;border-bottom:3px solid #1B2433;font:800 .8rem var(--display);font-style:normal;text-align:center;color:#fff;height:16px}
+.filtros{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:-8px}
+.filtros button{padding:7px 14px;border-radius:999px}
+.filtros button[aria-pressed="false"]{background:var(--panel);color:var(--fg)}
+.lista li[hidden]{display:none}
 footer{color:var(--muted);font-size:.85rem;text-align:center}
 </style>
 </head>
@@ -79,6 +102,8 @@ footer{color:var(--muted);font-size:.85rem;text-align:center}
     <h1>Jo<span>gos</span></h1>
     <p>Jogos de navegador feitos com HTML, CSS e JavaScript. Escolha um e divirta-se — funcionam no computador e no celular.</p>
   </div>
+
+  <div class="filtros" id="filtros" role="group" aria-label="Filtrar por categoria"></div>
 
   <ul class="lista">
     <li><a class="jogo" href="2048.html">
@@ -180,9 +205,68 @@ footer{color:var(--muted);font-size:.85rem;text-align:center}
       </div></div>
       <div class="info"><span class="tag">Estratégia</span><h2>Lig 4</h2><p>Alinhe quatro fichas antes do adversário.</p></div>
     </a></li>
+
+    <li><a class="jogo" href="damas.html">
+      <div class="arte adam" aria-hidden="true"><div class="g">
+        <i></i><i class="e"><b class="k"></b></i><i></i><i class="e"><b class="k"></b></i><i></i><i class="e"></i>
+        <i class="e"></i><i></i><i class="e"><b class="k"></b></i><i></i><i class="e"></i><i></i>
+        <i></i><i class="e"></i><i></i><i class="e"><b class="w"></b></i><i></i><i class="e"></i>
+        <i class="e"><b class="w"></b></i><i></i><i class="e"><b class="w"></b></i><i></i><i class="e"><b class="w"></b></i><i></i>
+      </div></div>
+      <div class="info"><span class="tag">Estratégia</span><h2>Damas</h2><p>Regras brasileiras, contra o computador ou um amigo.</p></div>
+    </a></li>
+
+    <li><a class="jogo" href="sudoku.html">
+      <div class="arte asud" aria-hidden="true"><div class="g">
+        <i>5</i><i>3</i><i class="u">4</i><i></i><i>7</i><i></i>
+        <i>6</i><i></i><i></i><i>1</i><i class="s u">9</i><i>5</i>
+        <i></i><i>9</i><i>8</i><i></i><i></i><i class="u">2</i>
+        <i>8</i><i class="u">5</i><i></i><i>6</i><i></i><i>3</i>
+      </div></div>
+      <div class="info"><span class="tag">Lógica</span><h2>Sudoku</h2><p>Jogos novos a cada partida, com notas e três níveis.</p></div>
+    </a></li>
+
+    <li><a class="jogo" href="invasores.html">
+      <div class="arte ainv" aria-hidden="true">
+        <div class="al">
+          <i style="background-color:#F0657A"></i><i style="background-color:#F0657A"></i><i style="background-color:#F0657A"></i><i style="background-color:#F0657A"></i><i style="background-color:#F0657A"></i>
+          <i style="background-color:#F3C04F"></i><i style="background-color:#F3C04F"></i><i style="visibility:hidden"></i><i style="background-color:#F3C04F"></i><i style="background-color:#F3C04F"></i>
+          <i style="background-color:#7FD1C7"></i><i style="background-color:#7FD1C7"></i><i style="background-color:#7FD1C7"></i><i style="visibility:hidden"></i><i style="background-color:#7FD1C7"></i>
+        </div>
+        <span class="tr"></span><span class="nv"></span>
+      </div>
+      <div class="info"><span class="tag">Arcade</span><h2>Invasores</h2><p>Defenda o planeta de ondas de alienígenas.</p></div>
+    </a></li>
+
+    <li><a class="jogo" href="forca.html">
+      <div class="arte afor" aria-hidden="true">
+        <svg viewBox="0 0 150 170" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" style="margin-bottom:22px">
+          <path d="M15 160 H95 M35 160 V12 H105 V30"/><circle cx="105" cy="45" r="15"/><path d="M105 60 V105 M105 72 L85 92 M105 72 L125 92"/>
+        </svg>
+        <div class="ps"><i>c</i><i></i><i>p</i><i></i><i></i><i></i><i>r</i><i></i></div>
+      </div>
+      <div class="info"><span class="tag">Palavras</span><h2>Forca</h2><p>Descubra a palavra antes que o boneco seja enforcado.</p></div>
+    </a></li>
   </ul>
 
   <footer>Os recordes ficam salvos no seu navegador.</footer>
 </div>
+<script>
+// filtros gerados a partir das categorias dos cartões
+const itens = [...document.querySelectorAll('.lista li')];
+const cats = ['Todos', ...new Set(itens.map(li => li.querySelector('.tag').textContent))];
+const f = document.getElementById('filtros');
+cats.forEach(c => {
+  const b = document.createElement('button'); b.textContent = c; b.setAttribute('aria-pressed', c==='Todos');
+  b.onclick = () => {
+    f.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x===b));
+    itens.forEach(li => li.hidden = c!=='Todos' && li.querySelector('.tag').textContent!==c);
+    try { localStorage.setItem('menu-filtro', c) } catch(e) {}
+  };
+  f.appendChild(b);
+});
+try { const s = localStorage.getItem('menu-filtro'); if (s) [...f.children].find(b => b.textContent===s)?.click(); } catch(e) {}
+document.querySelector('.topo p').textContent = `${itens.length} jogos de navegador feitos com HTML, CSS e JavaScript. Escolha um e divirta-se — funcionam no computador e no celular.`;
+</script>
 </body>
 </html>

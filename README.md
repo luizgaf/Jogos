@@ -18,6 +18,10 @@ Abra o `index.html` no navegador para ver o menu.
 | Pong | `pong.html` | Mouse, dedo ou ← →; 3 níveis |
 | Genius | `genius.html` | Clique/toque ou Q W A S |
 | Lig 4 | `lig4.html` | Clique na coluna ou teclas 1–7; vs computador ou 2 jogadores |
+| Damas | `damas.html` | Clique na peça e no destino; regras brasileiras; vs computador ou 2 jogadores |
+| Sudoku | `sudoku.html` | Clique/setas e 1–9; N alterna notas; Ctrl+Z desfaz; 3 níveis |
+| Invasores | `invasores.html` | ← → movem, espaço atira, P pausa; botões na tela no celular |
+| Forca | `forca.html` | Teclado físico ou na tela; 8 categorias |
 
 `comum.css` guarda as cores, fontes e componentes compartilhados (com tema escuro automático).
 Os recordes ficam salvos no `localStorage` do navegador.

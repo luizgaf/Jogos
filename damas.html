@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Damas</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+.wrap{max-width:500px}
+.tab{display:grid;grid-template-columns:repeat(8,1fr);border-radius:12px;overflow:hidden;border:8px solid #6B4A2E;box-shadow:0 10px 30px -14px rgba(0,0,0,.5)}
+.c{aspect-ratio:1;position:relative;display:grid;place-items:center;background:#EAD9B5}
+.c.e{background:#9C7148;cursor:pointer}
+.c.sel{background:#C8913E}
+.c.ult{box-shadow:inset 0 0 0 3px rgba(243,192,79,.75)}
+.c.alvo::after{content:"";width:30%;height:30%;border-radius:50%;background:rgba(63,184,175,.85);position:absolute}
+.c.pode .pc{box-shadow:0 0 0 3px var(--teal),0 3px 0 rgba(0,0,0,.35)}
+.pc{width:78%;height:78%;border-radius:50%;position:relative;box-shadow:0 3px 0 rgba(0,0,0,.35);transition:transform .15s;display:grid;place-items:center}
+.pc.br{background:radial-gradient(circle at 35% 30%,#fff,#E4DFD4 60%,#C9C2B3)}
+.pc.pt{background:radial-gradient(circle at 35% 30%,#5A6378,#2A3040 60%,#151925)}
+.pc::before{content:"";position:absolute;inset:16%;border-radius:50%;border:2px solid rgba(0,0,0,.12)}
+.pc.pt::before{border-color:rgba(255,255,255,.12)}
+.pc.d::after{content:"♛";font-size:clamp(.9rem,4.4vw,1.5rem);line-height:1;color:var(--gold);text-shadow:0 1px 0 rgba(0,0,0,.4);position:relative}
+.c.sel .pc{transform:translateY(-3px) scale(1.05)}
+.pc.some{animation:some .3s forwards}
+@keyframes some{to{transform:scale(0);opacity:0}}
+#status{text-align:center;margin:0;font-weight:600;min-height:1.4em}
+.modo{display:flex;gap:6px}
+.modo button{padding:7px 12px}
+.modo button[aria-pressed="false"]{background:var(--panel);color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Da<span>mas</span></h1>
+    <div class="scores">
+      <div class="score"><small>Brancas</small><b id="nb">12</b></div>
+      <div class="score"><small>Pretas</small><b id="np">12</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <div class="modo" role="group" aria-label="Modo">
+      <button data-m="cpu" aria-pressed="true">vs Computador</button>
+      <button data-m="2p" aria-pressed="false">2 jogadores</button>
+    </div>
+    <button id="novo" class="sec">Nova partida</button>
+  </div>
+  <div class="palco">
+    <div class="tab" id="tab"></div>
+    <div class="overlay" id="ov" hidden>
+      <h2 id="ovTitulo"></h2>
+      <p id="ovTexto"></p>
+      <button id="denovo">Jogar de novo</button>
+    </div>
+  </div>
+  <p id="status"></p>
+  <p class="ajuda">Regras brasileiras: a captura é obrigatória (e vale a que pega mais peças), peças comuns capturam para trás e a dama anda várias casas.</p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const N = 8, DIRS = [[-1,-1],[-1,1],[1,-1],[1,1]];
+let tab, vez, sel = null, lances = [], fim, modo = 'cpu', ocupado = false, ultimo = [], semCaptura = 0;
+const casas = [];
+
+for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+  const d = document.createElement('div');
+  d.className = 'c' + ((r+c)%2 ? ' e' : '');
+  d.onclick = () => clicar(r, c);
+  $('tab').appendChild(d); casas.push(d);
+}
+const casa = (r,c) => casas[r*N+c];
+const dentro = (r,c) => r>=0 && r<N && c>=0 && c<N;
+const corDe = p => p && p.toLowerCase();
+const ehDama = p => p && p === p.toUpperCase();
+
+function inicial(){
+  const t = Array.from({length:N}, () => Array(N).fill(null));
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++) if ((r+c)%2){ if (r<3) t[r][c]='p'; else if (r>4) t[r][c]='b'; }
+  return t;
+}
+
+// busca em profundidade de todas as sequências de captura a partir de (r,c)
+function capturas(t, r, c, peca, tomadas, caminho, out){
+  let continuou = false;
+  const cor = corDe(peca);
+  for (const [dr,dc] of DIRS){
+    if (ehDama(peca)){
+      let i = r+dr, j = c+dc;
+      while (dentro(i,j) && !t[i][j]){ i+=dr; j+=dc; }
+      if (!dentro(i,j) || corDe(t[i][j])===cor || tomadas.some(([a,b])=>a===i&&b===j)) continue;
+      let li = i+dr, lj = j+dc;
+      while (dentro(li,lj) && !t[li][lj]){
+        continuou = true;
+        capturas(t, li, lj, peca, [...tomadas,[i,j]], [...caminho,[li,lj]], out);
+        li+=dr; lj+=dc;
+      }
+    } else {
+      const i = r+dr, j = c+dc, li = r+2*dr, lj = c+2*dc;
+      if (!dentro(li,lj) || !t[i][j] || corDe(t[i][j])===cor || t[li][lj]) continue;
+      if (tomadas.some(([a,b])=>a===i&&b===j)) continue;
+      continuou = true;
+      capturas(t, li, lj, peca, [...tomadas,[i,j]], [...caminho,[li,lj]], out);
+    }
+  }
+  if (!continuou && tomadas.length) out.push({caminho, tomadas});
+}
+
+function gerar(t, cor){
+  let caps = [], simples = [];
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+    const p = t[r][c]; if (corDe(p)!==cor) continue;
+    t[r][c] = null; // a peça sai da casa enquanto pula
+    const out = []; capturas(t, r, c, p, [], [[r,c]], out); caps.push(...out);
+    t[r][c] = p;
+    if (ehDama(p)){
+      for (const [dr,dc] of DIRS){ let i=r+dr, j=c+dc; while (dentro(i,j) && !t[i][j]){ simples.push({caminho:[[r,c],[i,j]], tomadas:[]}); i+=dr; j+=dc; } }
+    } else {
+      const f = cor==='b' ? -1 : 1;
+      for (const dc of [-1,1]){ const i=r+f, j=c+dc; if (dentro(i,j) && !t[i][j]) simples.push({caminho:[[r,c],[i,j]], tomadas:[]}); }
+    }
+  }
+  if (caps.length){ const m = Math.max(...caps.map(x=>x.tomadas.length)); return caps.filter(x=>x.tomadas.length===m); }
+  return simples;
+}
+
+function aplicar(t, l){
+  const [r0,c0] = l.caminho[0], [r1,c1] = l.caminho[l.caminho.length-1];
+  let p = t[r0][c0]; t[r0][c0] = null;
+  l.tomadas.forEach(([r,c]) => t[r][c] = null);
+  if ((p==='b' && r1===0) || (p==='p' && r1===N-1)) p = p.toUpperCase();
+  t[r1][c1] = p;
+}
+
+function clonar(t){ return t.map(r => r.slice()); }
+
+function avaliar(t){
+  let s = 0;
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+    const p = t[r][c]; if (!p) continue;
+    let v = ehDama(p) ? 3.2 : 1 + (corDe(p)==='p' ? r : N-1-r) * 0.06;
+    if (c===0 || c===N-1) v += 0.05;
+    s += corDe(p)==='p' ? v : -v;
+  }
+  return s;
+}
+
+function minimax(t, prof, a, b, max){
+  const cor = max ? 'p' : 'b';
+  const ls = gerar(t, cor);
+  if (!ls.length) return max ? -1000 - prof : 1000 + prof;
+  if (prof === 0) return avaliar(t);
+  let melhor = max ? -Infinity : Infinity;
+  for (const l of ls){
+    const t2 = clonar(t); aplicar(t2, l);
+    // capturas não contam como profundidade gasta (evita "efeito horizonte")
+    const s = minimax(t2, l.tomadas.length && prof === 1 ? 1 : prof-1, a, b, !max);
+    if (max){ if (s > melhor) melhor = s; a = Math.max(a, s); }
+    else { if (s < melhor) melhor = s; b = Math.min(b, s); }
+    if (b <= a) break;
+  }
+  return melhor;
+}
+
+function jogadaCpu(){
+  const ls = gerar(tab, 'p');
+  if (ls.length === 1) return ls[0];
+  let melhor = -Infinity, esc = ls[0];
+  for (const l of ls){
+    const t2 = clonar(tab); aplicar(t2, l);
+    const s = minimax(t2, 4, -Infinity, Infinity, false) + Math.random()*0.05;
+    if (s > melhor){ melhor = s; esc = l; }
+  }
+  return esc;
+}
+
+function desenhar(){
+  let nb = 0, np = 0;
+  const podem = new Set(lances.map(l => l.caminho[0].join()));
+  const alvos = sel ? new Set(lances.filter(l => l.caminho[0][0]===sel[0] && l.caminho[0][1]===sel[1]).map(l => l.caminho[l.caminho.length-1].join())) : new Set();
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++){
+    const d = casa(r,c), p = tab[r][c];
+    d.classList.toggle('sel', !!sel && sel[0]===r && sel[1]===c);
+    d.classList.toggle('alvo', alvos.has(r+','+c));
+    d.classList.toggle('ult', ultimo.some(([a,b]) => a===r && b===c));
+    d.classList.toggle('pode', !sel && humano() && podem.has(r+','+c) && lances.some(l=>l.tomadas.length));
+    d.innerHTML = p ? `<div class="pc ${corDe(p)==='b'?'br':'pt'}${ehDama(p)?' d':''}"></div>` : '';
+    if (corDe(p)==='b') nb++; else if (p) np++;
+  }
+  $('nb').textContent = nb; $('np').textContent = np;
+}
+
+const humano = () => !fim && !ocupado && (modo==='2p' || vez==='b');
+
+function status(msg){
+  const nome = vez==='b' ? 'Brancas' : 'Pretas';
+  const obrig = lances.length && lances[0].tomadas.length ? ` — captura obrigatória (${lances[0].tomadas.length})` : '';
+  $('status').textContent = msg || (modo==='cpu' ? (vez==='b' ? 'Sua vez' + obrig : 'Computador pensando…') : `Vez das ${nome}` + obrig);
+}
+
+function nova(){
+  tab = inicial(); vez = 'b'; sel = null; fim = false; ocupado = false; ultimo = []; semCaptura = 0;
+  $('ov').hidden = true;
+  lances = gerar(tab, vez); desenhar(); status();
+}
+
+function clicar(r, c){
+  if (!humano()) return;
+  if (corDe(tab[r][c]) === vez && lances.some(l => l.caminho[0][0]===r && l.caminho[0][1]===c)){ sel = [r,c]; desenhar(); return; }
+  if (!sel) return;
+  const l = lances.find(l => l.caminho[0][0]===sel[0] && l.caminho[0][1]===sel[1] && l.caminho.at(-1)[0]===r && l.caminho.at(-1)[1]===c);
+  if (l) executar(l); else { sel = null; desenhar(); }
+}
+
+async function executar(l){
+  ocupado = true; sel = null;
+  const pausa = ms => new Promise(r => setTimeout(r, ms));
+  // anima pulo a pulo
+  let p = tab[l.caminho[0][0]][l.caminho[0][1]];
+  for (let k=1;k<l.caminho.length;k++){
+    const [a,b] = l.caminho[k-1], [r,c] = l.caminho[k];
+    tab[a][b] = null; tab[r][c] = p; ultimo = [[a,b],[r,c]];
+    lances = []; desenhar();
+    const tom = l.tomadas[k-1];
+    if (tom) casa(tom[0],tom[1]).firstChild?.classList.add('some');
+    await pausa(l.caminho.length > 2 ? 280 : 140);
+    if (tom) tab[tom[0]][tom[1]] = null;
+  }
+  const [r0,c0] = l.caminho.at(-1); tab[r0][c0] = null; tab[l.caminho[0][0]][l.caminho[0][1]] = p;
+  aplicar(tab, l);
+  ultimo = [l.caminho[0], l.caminho.at(-1)];
+  semCaptura = l.tomadas.length || !ehDama(p) ? 0 : semCaptura + 1;
+  vez = vez==='b' ? 'p' : 'b';
+  lances = gerar(tab, vez);
+  ocupado = false; desenhar();
+  if (!lances.length) return terminar(vez==='b' ? 'p' : 'b');
+  if (semCaptura >= 40) return terminar(null);
+  status();
+  if (modo==='cpu' && vez==='p'){
+    ocupado = true; status();
+    setTimeout(() => { const j = jogadaCpu(); ocupado = false; executar(j); }, 350);
+  }
+}
+
+function terminar(venc){
+  fim = true; desenhar();
+  const t = venc===null ? 'Empate' : modo==='cpu' ? (venc==='b' ? 'Você venceu! 🎉' : 'O computador venceu') : `${venc==='b'?'Brancas':'Pretas'} venceram! 🎉`;
+  status(t);
+  $('ovTitulo').textContent = t;
+  $('ovTexto').textContent = venc===null ? '20 lances de dama sem captura.' : 'O adversário ficou sem jogadas.';
+  setTimeout(() => $('ov').hidden = false, 500);
+}
+
+document.querySelectorAll('.modo button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.modo button').forEach(x => x.setAttribute('aria-pressed', x===b));
+  modo = b.dataset.m; nova();
+});
+$('novo').onclick = nova; $('denovo').onclick = nova;
+nova();
+</script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Forca</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+.cena{display:grid;grid-template-columns:150px 1fr;gap:16px;align-items:center;background:var(--panel);border-radius:14px;padding:14px}
+svg{width:100%;height:auto;color:var(--fg)}
+svg .parte{opacity:0;transition:opacity .25s}
+svg .parte.on{opacity:1}
+.dica{display:flex;flex-direction:column;gap:6px}
+.dica small{font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:600}
+.dica b{font-family:var(--display);font-weight:600;font-size:1.2rem;color:var(--accent)}
+.vidas{display:flex;gap:4px}
+.vidas i{width:14px;height:14px;border-radius:50%;background:var(--teal)}
+.vidas i.perdida{background:var(--board)}
+.palavra{display:flex;flex-wrap:wrap;justify-content:center;gap:clamp(4px,1.6vw,8px);min-height:56px}
+.palavra .esp{width:clamp(10px,4vw,20px)}
+.letra{width:clamp(26px,8vw,38px);height:clamp(36px,10vw,48px);border-bottom:3px solid var(--fg);display:grid;place-items:end center;padding-bottom:2px;
+  font-family:var(--display);font-weight:800;font-size:clamp(1.2rem,6vw,1.8rem);text-transform:uppercase}
+.letra.nova{animation:surge .3s}
+.letra.faltou{color:var(--accent)}
+@keyframes surge{from{transform:translateY(8px);opacity:0}}
+.teclado{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.tecla{width:clamp(30px,9vw,40px);height:44px;padding:0;background:var(--panel);color:var(--fg);text-transform:uppercase;font-weight:700}
+.tecla.certa{background:var(--teal);color:#fff}
+.tecla.errada{background:var(--board);color:var(--muted)}
+.tecla:disabled{cursor:default}
+.cats{display:flex;gap:6px;flex-wrap:wrap}
+.cats select{font:inherit;font-weight:600;padding:8px 12px;border-radius:10px;border:0;background:var(--panel);color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>For<span>ca</span></h1>
+    <div class="scores">
+      <div class="score"><small>Acertos</small><b id="vit">0</b></div>
+      <div class="score"><small>Sequência</small><b id="seq">0</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <div class="cats">
+      <select id="cat" aria-label="Categoria">
+        <option value="todas">Todas as categorias</option>
+      </select>
+    </div>
+    <button id="novo" class="sec">Nova palavra</button>
+  </div>
+  <div class="cena">
+    <svg viewBox="0 0 150 170" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
+      <path d="M15 160 H95 M35 160 V12 H105 V30"/>
+      <circle class="parte" cx="105" cy="45" r="15"/>
+      <path class="parte" d="M105 60 V105"/>
+      <path class="parte" d="M105 72 L85 92"/>
+      <path class="parte" d="M105 72 L125 92"/>
+      <path class="parte" d="M105 105 L88 135"/>
+      <path class="parte" d="M105 105 L122 135"/>
+    </svg>
+    <div class="dica">
+      <small>Categoria</small><b id="dica">—</b>
+      <small style="margin-top:6px">Chances</small><div class="vidas" id="vidas"></div>
+    </div>
+  </div>
+  <div class="palavra" id="palavra" aria-live="polite"></div>
+  <p id="msg" style="text-align:center;margin:0;font-weight:600;min-height:1.4em"></p>
+  <div class="teclado" id="teclado"></div>
+  <p class="ajuda">Use o teclado ou toque nas letras. Acentos e ç são revelados junto com a letra base.</p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const PALAVRAS = {
+  'Animais': 'cachorro gato elefante girafa tartaruga borboleta jacaré tamanduá capivara onça papagaio golfinho tubarão coruja macaco cavalo pinguim zebra camaleão formiga baleia raposa esquilo lagartixa tucano',
+  'Frutas': 'abacaxi banana morango melancia laranja jabuticaba goiaba maracujá manga uva pêssego cereja amora caju acerola pitanga graviola framboesa limão abacate mamão melão tangerina coco',
+  'Países': 'brasil argentina portugal japão canadá alemanha itália frança méxico egito austrália índia china rússia chile peru colômbia uruguai espanha marrocos noruega grécia turquia suécia angola',
+  'Profissões': 'professor médico bombeiro engenheiro advogado cozinheiro jardineiro dentista enfermeiro piloto carteiro arquiteto jornalista veterinário eletricista padeiro fotógrafo músico motorista programador',
+  'Objetos': 'guarda-chuva tesoura geladeira computador travesseiro bicicleta relógio espelho cadeira lanterna mochila escova garrafa caderno panela vassoura ventilador chaveiro telefone almofada',
+  'Esportes': 'futebol basquete vôlei natação ciclismo atletismo handebol tênis judô capoeira surfe skate xadrez boxe ginástica esgrima remo hipismo badminton karatê',
+  'Comidas': 'feijoada brigadeiro coxinha pastel tapioca lasanha pipoca churrasco moqueca acarajé pudim pamonha cuscuz farofa sorvete panqueca hambúrguer macarrão risoto quindim',
+  'Natureza': 'cachoeira montanha floresta vulcão arco-íris oceano deserto relâmpago furacão geleira cordilheira pântano savana planície tempestade neblina orvalho caverna'
+};
+const MAX = 6;
+const tira = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+let palavra, base, categoria, tentadas, erros, fim;
+let stats = {vit:0, seq:0}; try { stats = JSON.parse(localStorage.getItem('forca-stats')) || stats } catch(e) {}
+
+Object.keys(PALAVRAS).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = k; $('cat').appendChild(o); });
+'abcdefghijklmnopqrstuvwxyz'.split('').forEach(l => {
+  const b = document.createElement('button'); b.className = 'tecla'; b.textContent = l; b.dataset.l = l;
+  b.onclick = () => chutar(l); $('teclado').appendChild(b);
+});
+
+function nova(){
+  const c = $('cat').value;
+  categoria = c === 'todas' ? Object.keys(PALAVRAS)[Math.floor(Math.random()*Object.keys(PALAVRAS).length)] : c;
+  const lista = PALAVRAS[categoria].split(' ');
+  let p; do { p = lista[Math.floor(Math.random()*lista.length)]; } while (p === palavra && lista.length > 1);
+  palavra = p; base = tira(palavra).replace(/ç/g,'c');
+  tentadas = new Set(); erros = 0; fim = false;
+  $('dica').textContent = categoria; $('msg').textContent = '';
+  document.querySelectorAll('.tecla').forEach(b => { b.className = 'tecla'; b.disabled = false; });
+  desenhar(); hud();
+}
+
+function hud(){ $('vit').textContent = stats.vit; $('seq').textContent = stats.seq; }
+
+function desenhar(novas = new Set()){
+  const p = $('palavra'); p.innerHTML = '';
+  [...palavra].forEach((ch, i) => {
+    if (ch === '-'){ const e = document.createElement('div'); e.className = 'letra'; e.style.borderColor = 'transparent'; e.textContent = '-'; p.appendChild(e); return; }
+    const d = document.createElement('div'); d.className = 'letra';
+    const b = base[i];
+    if (tentadas.has(b)){ d.textContent = ch; if (novas.has(b)) d.classList.add('nova'); }
+    else if (fim){ d.textContent = ch; d.classList.add('faltou'); }
+    p.appendChild(d);
+  });
+  document.querySelectorAll('svg .parte').forEach((el, i) => el.classList.toggle('on', i < erros));
+  $('vidas').innerHTML = Array.from({length:MAX}, (_,i) => `<i class="${i < MAX-erros ? '' : 'perdida'}"></i>`).join('');
+}
+
+function chutar(l){
+  if (fim || tentadas.has(l)) return;
+  tentadas.add(l);
+  const b = document.querySelector(`.tecla[data-l="${l}"]`); b.disabled = true;
+  if (base.includes(l)) b.classList.add('certa'); else { b.classList.add('errada'); erros++; }
+  const venceu = [...base].every(ch => ch === '-' || tentadas.has(ch));
+  if (venceu || erros >= MAX){
+    fim = true;
+    if (venceu){ stats.vit++; stats.seq++; } else stats.seq = 0;
+    try { localStorage.setItem('forca-stats', JSON.stringify(stats)) } catch(e) {}
+    $('msg').textContent = venceu ? 'Você acertou! 🎉' : 'Enforcado! A palavra está em vermelho.';
+    document.querySelectorAll('.tecla').forEach(t => t.disabled = true);
+    hud();
+  }
+  desenhar(new Set([l]));
+}
+
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const l = tira(e.key.toLowerCase()).replace('ç','c');
+  if (/^[a-z]$/.test(l)) chutar(l);
+  if (e.key === 'Enter' && fim) nova();
+});
+$('novo').onclick = e => { nova(); e.currentTarget.blur(); };
+$('cat').onchange = e => { nova(); e.currentTarget.blur(); };
+nova();
+</script>
+</body>
+</html>
