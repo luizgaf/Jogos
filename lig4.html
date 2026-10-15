@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lig 4</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+.wrap{max-width:500px}
+.tab{display:grid;grid-template-columns:repeat(7,1fr);gap:clamp(4px,1.6vw,8px);background:var(--blue);padding:clamp(6px,2vw,12px);border-radius:16px;position:relative}
+.col{display:grid;grid-template-rows:repeat(6,1fr);gap:clamp(4px,1.6vw,8px);background:none;padding:0;border-radius:999px}
+.col:active{transform:none}
+.col:hover:not(:disabled) .f:not(.R):not(.A){background:color-mix(in srgb,var(--bg) 70%,var(--blue))}
+.col:disabled{cursor:default}
+.f{aspect-ratio:1;border-radius:50%;background:var(--bg);box-shadow:inset 0 3px 6px rgba(0,0,0,.25)}
+.f.R{background:var(--accent)} .f.A{background:var(--gold)}
+.f.cai{animation:cai .35s cubic-bezier(.5,0,.75,1.2)}
+@keyframes cai{from{transform:translateY(var(--de))}}
+.f.ganha{outline:4px solid #fff;outline-offset:-4px;animation:pulsa .8s infinite alternate}
+@keyframes pulsa{to{filter:brightness(1.25)}}
+.modo{display:flex;gap:6px}
+.modo button{padding:7px 12px}
+.modo button[aria-pressed="false"]{background:var(--panel);color:var(--fg)}
+#status{text-align:center;margin:0;font-weight:600;min-height:1.4em;display:flex;align-items:center;justify-content:center;gap:8px}
+.ficha{display:inline-block;width:16px;height:16px;border-radius:50%}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Lig <span>4</span></h1>
+    <div class="scores">
+      <div class="score"><small>Vermelho</small><b id="sr">0</b></div>
+      <div class="score"><small>Amarelo</small><b id="sa">0</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <div class="modo" role="group" aria-label="Modo">
+      <button data-m="cpu" aria-pressed="true">vs Computador</button>
+      <button data-m="2p" aria-pressed="false">2 jogadores</button>
+    </div>
+    <button id="novo" class="sec">Nova partida</button>
+  </div>
+  <div class="tab" id="tab"></div>
+  <p id="status"></p>
+  <p class="ajuda">Alinhe 4 fichas na horizontal, vertical ou diagonal. Teclas 1–7 também jogam.</p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const C = 7, L = 6;
+let tab, vez, fim, modo = 'cpu', placar = {R:0, A:0}, comeca = 'R', pensando = false;
+const cols = [], furos = [];
+
+for (let c=0;c<C;c++){
+  const b = document.createElement('button'); b.className = 'col'; b.setAttribute('aria-label', `Coluna ${c+1}`);
+  furos[c] = [];
+  for (let l=0;l<L;l++){ const f = document.createElement('div'); f.className = 'f'; b.appendChild(f); furos[c][l] = f; }
+  b.onclick = () => jogar(c);
+  $('tab').appendChild(b); cols.push(b);
+}
+
+function livre(t, c){ for (let l=L-1;l>=0;l--) if (!t[l][c]) return l; return -1; }
+
+function linhas4(t){
+  const out = [];
+  for (let l=0;l<L;l++) for (let c=0;c<C;c++)
+    for (const [dl,dc] of [[0,1],[1,0],[1,1],[1,-1]]){
+      const el = l+3*dl, ec = c+3*dc;
+      if (el<0||el>=L||ec<0||ec>=C) continue;
+      out.push([0,1,2,3].map(k => [l+k*dl, c+k*dc]));
+    }
+  return out;
+}
+const JANELAS = linhas4();
+
+function vencedor(t){
+  for (const j of JANELAS){ const [a,b,c,d] = j.map(([l,cc]) => t[l][cc]); if (a && a===b && a===c && a===d) return {j:a, j4:j}; }
+  return t[0].every(Boolean) ? {j:'E'} : null;
+}
+
+function avaliar(t){
+  let s = 0;
+  for (let l=0;l<L;l++) if (t[l][3]==='A') s += 3; else if (t[l][3]==='R') s -= 3;
+  for (const j of JANELAS){
+    let a=0, r=0;
+    for (const [l,c] of j){ if (t[l][c]==='A') a++; else if (t[l][c]==='R') r++; }
+    if (a && r) continue;
+    if (a===3) s += 5; else if (a===2) s += 2;
+    if (r===3) s -= 6; else if (r===2) s -= 2;
+  }
+  return s;
+}
+
+const ORDEM = [3,2,4,1,5,0,6];
+function minimax(t, prof, alfa, beta, max){
+  const v = vencedor(t);
+  if (v) return v.j==='A' ? 100000+prof : v.j==='R' ? -100000-prof : 0;
+  if (prof === 0) return avaliar(t);
+  let melhor = max ? -Infinity : Infinity;
+  for (const c of ORDEM){
+    const l = livre(t, c); if (l < 0) continue;
+    t[l][c] = max ? 'A' : 'R';
+    const s = minimax(t, prof-1, alfa, beta, !max);
+    t[l][c] = null;
+    if (max){ melhor = Math.max(melhor, s); alfa = Math.max(alfa, s); }
+    else { melhor = Math.min(melhor, s); beta = Math.min(beta, s); }
+    if (beta <= alfa) break;
+  }
+  return melhor;
+}
+
+function jogadaCpu(){
+  let melhor = -Infinity, esc = 3;
+  for (const c of ORDEM){
+    const l = livre(tab, c); if (l < 0) continue;
+    tab[l][c] = 'A';
+    const s = minimax(tab, 5, -Infinity, Infinity, false) + (Math.random()*0.5);
+    tab[l][c] = null;
+    if (s > melhor){ melhor = s; esc = c; }
+  }
+  return esc;
+}
+
+function nova(){
+  tab = Array.from({length:L}, () => Array(C).fill(null)); fim = false; vez = comeca; pensando = false;
+  furos.flat().forEach(f => f.className = 'f');
+  cols.forEach(b => b.disabled = false);
+  status();
+  if (modo==='cpu' && vez==='A') cpuJoga();
+}
+
+function status(msg){
+  const nome = {R:'Vermelho', A:'Amarelo'};
+  $('status').innerHTML = msg || `<span class="ficha" style="background:var(${vez==='R'?'--accent':'--gold'})"></span>` +
+    (modo==='cpu' ? (vez==='R' ? 'Sua vez' : 'Computador pensando…') : `Vez do ${nome[vez]}`);
+}
+
+function jogar(c){
+  if (fim || pensando || (modo==='cpu' && vez==='A')) return;
+  if (soltar(c) && !fim && modo==='cpu') cpuJoga();
+}
+
+function cpuJoga(){
+  pensando = true; status();
+  setTimeout(() => { const c = jogadaCpu(); pensando = false; soltar(c); }, 380);
+}
+
+function soltar(c){
+  const l = livre(tab, c); if (l < 0) return false;
+  tab[l][c] = vez;
+  const f = furos[c][l];
+  f.style.setProperty('--de', `-${(l+1)*115}%`);
+  f.classList.add(vez, 'cai');
+  if (livre(tab, c) < 0) cols[c].disabled = true;
+  const v = vencedor(tab);
+  if (v){
+    fim = true; cols.forEach(b => b.disabled = true);
+    if (v.j4){ placar[v.j]++; setTimeout(() => v.j4.forEach(([l,cc]) => furos[cc][l].classList.add('ganha')), 350); }
+    $('sr').textContent = placar.R; $('sa').textContent = placar.A;
+    status(v.j==='E' ? 'Empate!' : modo==='cpu' ? (v.j==='R' ? 'Você venceu! 🎉' : 'O computador venceu.') : `${v.j==='R'?'Vermelho':'Amarelo'} venceu! 🎉`);
+    comeca = comeca==='R' ? 'A' : 'R';
+    return true;
+  }
+  vez = vez==='R' ? 'A' : 'R'; status();
+  return true;
+}
+
+document.addEventListener('keydown', e => { const n = +e.key; if (n>=1 && n<=7) jogar(n-1); });
+document.querySelectorAll('.modo button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.modo button').forEach(x => x.setAttribute('aria-pressed', x===b));
+  modo = b.dataset.m; placar = {R:0, A:0}; comeca = 'R';
+  $('sr').textContent = $('sa').textContent = 0; nova();
+});
+$('novo').onclick = nova;
+nova();
+</script>
+</body>
+</html>

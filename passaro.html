@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pássaro Voador</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+canvas{display:block;width:100%;aspect-ratio:2/3;border-radius:14px;touch-action:none;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Pássa<span>ro</span></h1>
+    <div class="scores">
+      <div class="score"><small>Pontos</small><b id="pontos">0</b></div>
+      <div class="score"><small>Recorde</small><b id="recorde">0</b></div>
+    </div>
+  </header>
+  <div class="palco">
+    <canvas id="tela" width="360" height="540"></canvas>
+    <div class="overlay" id="ov">
+      <h2 id="ovTitulo">Pássaro Voador</h2>
+      <p id="ovTexto">Toque, clique ou aperte espaço para bater as asas.</p>
+      <button id="iniciar">Jogar</button>
+    </div>
+  </div>
+  <p class="ajuda">Passe entre os canos sem encostar neles nem no chão.</p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const tela = $('tela'), ctx = tela.getContext('2d'), W = tela.width, H = tela.height;
+const CHAO = H - 60, VAO = 150, LARG = 62, ESP = 210;
+let ave, canos, pontos, estado = 'menu', ultimo = 0, deslize = 0, nuvens;
+let recorde = 0; try { recorde = +localStorage.getItem('passaro-recorde') || 0 } catch(e) {}
+$('recorde').textContent = recorde;
+const escuro = () => matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light' || document.documentElement.dataset.theme === 'dark';
+
+function resetar(){
+  ave = {x: 90, y: H/2 - 40, vy: 0, r: 15};
+  canos = []; pontos = 0; $('pontos').textContent = 0;
+  for (let i=0;i<3;i++) canos.push(novoCano(W + 120 + i*ESP));
+  nuvens = Array.from({length:4}, (_,i) => ({x: i*110 + Math.random()*40, y: 40 + Math.random()*160, s: .6 + Math.random()*.6}));
+}
+function novoCano(x){ return {x, topo: 70 + Math.random()*(CHAO - VAO - 140), passou: false}; }
+
+function iniciar(){ resetar(); estado = 'jogando'; $('ov').hidden = true; bater(); ultimo = performance.now(); requestAnimationFrame(laco); }
+function bater(){ if (estado === 'jogando') ave.vy = -7.2; }
+
+function laco(t){
+  const dt = Math.min((t - ultimo)/16.67, 2.5); ultimo = t;
+  if (estado === 'jogando'){
+    ave.vy = Math.min(ave.vy + 0.42*dt, 10); ave.y += ave.vy*dt;
+    if (ave.y < ave.r){ ave.y = ave.r; ave.vy = Math.max(ave.vy, 0); }
+    deslize = (deslize + 2.6*dt) % 24;
+    canos.forEach(c => {
+      c.x -= 2.6*dt;
+      if (!c.passou && c.x + LARG < ave.x){ c.passou = true; pontos++; $('pontos').textContent = pontos; }
+    });
+    if (canos[0].x < -LARG){ canos.shift(); canos.push(novoCano(canos[canos.length-1].x + ESP)); }
+    nuvens.forEach(n => { n.x -= .5*n.s*dt; if (n.x < -80) n.x = W + 40; });
+    if (ave.y + ave.r > CHAO || canos.some(bate)) return fim();
+  }
+  desenhar();
+  if (estado === 'jogando') requestAnimationFrame(laco);
+}
+
+function bate(c){
+  const cx = Math.max(c.x, Math.min(ave.x, c.x + LARG));
+  for (const [y0,y1] of [[0, c.topo], [c.topo + VAO, CHAO]]){
+    const cy = Math.max(y0, Math.min(ave.y, y1));
+    if ((ave.x-cx)**2 + (ave.y-cy)**2 < (ave.r-2)**2) return true;
+  }
+  return false;
+}
+
+function fim(){
+  estado = 'fim'; desenhar();
+  if (pontos > recorde){ recorde = pontos; $('recorde').textContent = recorde; try { localStorage.setItem('passaro-recorde', recorde) } catch(e) {} }
+  const medalha = pontos >= 40 ? '🥇' : pontos >= 20 ? '🥈' : pontos >= 10 ? '🥉' : '';
+  $('ovTitulo').textContent = 'Fim de voo ' + medalha;
+  $('ovTexto').textContent = `${pontos} cano${pontos===1?'':'s'} • recorde ${recorde}`;
+  $('iniciar').textContent = 'Voar de novo';
+  setTimeout(() => $('ov').hidden = false, 350);
+}
+
+function desenhar(){
+  const d = escuro();
+  const ceu = ctx.createLinearGradient(0,0,0,CHAO);
+  ceu.addColorStop(0, d ? '#1A2A4A' : '#7FD1C7'); ceu.addColorStop(1, d ? '#2E3F66' : '#DDF3EF');
+  ctx.fillStyle = ceu; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = d ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.8)';
+  nuvens.forEach(n => { ctx.beginPath(); ctx.ellipse(n.x, n.y, 34*n.s, 14*n.s, 0, 0, 7); ctx.ellipse(n.x+20*n.s, n.y-8*n.s, 22*n.s, 14*n.s, 0, 0, 7); ctx.fill(); });
+  canos.forEach(c => {
+    ctx.fillStyle = '#3F9B5C';
+    ctx.fillRect(c.x, 0, LARG, c.topo); ctx.fillRect(c.x, c.topo + VAO, LARG, CHAO - c.topo - VAO);
+    ctx.fillStyle = '#2F7A47';
+    ctx.beginPath(); ctx.roundRect(c.x - 5, c.topo - 22, LARG + 10, 22, 4); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(c.x - 5, c.topo + VAO, LARG + 10, 22, 4); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.15)'; ctx.fillRect(c.x + 8, 0, 8, c.topo - 22); ctx.fillRect(c.x + 8, c.topo + VAO + 22, 8, CHAO);
+  });
+  ctx.fillStyle = d ? '#3A3428' : '#E8D39A'; ctx.fillRect(0, CHAO, W, H - CHAO);
+  ctx.fillStyle = d ? '#4A6B3A' : '#6BBF59'; ctx.fillRect(0, CHAO, W, 12);
+  ctx.fillStyle = 'rgba(0,0,0,.08)';
+  for (let x = -deslize; x < W; x += 24) ctx.fillRect(x, CHAO + 12, 12, H);
+  // pássaro
+  ctx.save(); ctx.translate(ave.x, ave.y); ctx.rotate(Math.max(-.5, Math.min(1.2, ave.vy / 9)));
+  ctx.fillStyle = '#F3C04F'; ctx.beginPath(); ctx.arc(0, 0, ave.r, 0, 7); ctx.fill();
+  ctx.fillStyle = '#F09A3E'; const asa = Math.sin(performance.now()/60) * 4;
+  ctx.beginPath(); ctx.ellipse(-5, 3 + (estado==='jogando'?asa:0), 9, 5, -.3, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(6, -5, 5.5, 0, 7); ctx.fill();
+  ctx.fillStyle = '#1B2433'; ctx.beginPath(); ctx.arc(8, -5, 2.5, 0, 7); ctx.fill();
+  ctx.fillStyle = '#E86A3A'; ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(22, 3); ctx.lineTo(11, 7); ctx.fill();
+  ctx.restore();
+  if (estado === 'jogando'){
+    ctx.font = '800 44px Unbounded, sans-serif'; ctx.textAlign = 'center';
+    ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(27,36,51,.5)'; ctx.strokeText(pontos, W/2, 80);
+    ctx.fillStyle = '#fff'; ctx.fillText(pontos, W/2, 80);
+  }
+}
+
+const toque = e => { if (estado === 'jogando'){ e.preventDefault(); bater(); } };
+tela.addEventListener('pointerdown', toque);
+document.addEventListener('keydown', e => {
+  if (e.key === ' ' || e.key === 'ArrowUp'){ e.preventDefault(); estado === 'jogando' ? bater() : $('ov').hidden ? null : iniciar(); }
+});
+$('iniciar').onclick = iniciar;
+resetar(); desenhar();
+</script>
+</body>
+</html>

@@ -12,9 +12,17 @@ Abra o `index.html` no navegador para ver o menu.
 | Jogo da Velha | `velha.html` | Clique/toque; vs computador (minimax) ou 2 jogadores |
 | Campo Minado | `campo-minado.html` | Clique abre, botão direito ou toque longo marca bandeira; 3 níveis |
 | Quebra-Tijolos | `tijolos.html` | Mouse, dedo ou setas; espaço/clique lança a bola |
+| Blocos | `blocos.html` | ← → movem, ↑ gira, ↓ desce, espaço solta, P pausa; botões na tela no celular |
+| Pássaro Voador | `passaro.html` | Clique, toque ou espaço |
+| Termo | `termo.html` | Teclado físico ou na tela; palavra do dia ou modo livre |
+| Pong | `pong.html` | Mouse, dedo ou ← →; 3 níveis |
+| Genius | `genius.html` | Clique/toque ou Q W A S |
+| Lig 4 | `lig4.html` | Clique na coluna ou teclas 1–7; vs computador ou 2 jogadores |
 
 `comum.css` guarda as cores, fontes e componentes compartilhados (com tema escuro automático).
 Os recordes ficam salvos no `localStorage` do navegador.
+
+As palavras do Termo (`termo-palavras.js`) foram derivadas do corpus [fserb/pt-br](https://github.com/fserb/pt-br) (licença MIT).
 
 ## Publicar no GitHub Pages
 

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Blocos</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+.jogo{display:grid;grid-template-columns:1fr 96px;gap:12px;align-items:start}
+canvas#tela{display:block;width:100%;aspect-ratio:1/2;border-radius:14px;background:var(--board);touch-action:none}
+.lado{display:flex;flex-direction:column;gap:8px}
+.lado .score{padding:8px 6px}
+.prox{background:var(--panel);border-radius:10px;padding:8px 6px;text-align:center}
+.prox small{display:block;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;margin-bottom:4px}
+canvas#prox{width:72px;height:72px}
+.controles{display:none;grid-template-columns:repeat(5,1fr);gap:6px}
+.controles button{background:var(--panel);color:var(--fg);padding:12px 0;font-size:1.1rem}
+@media (hover:none) and (pointer:coarse){.controles{display:grid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Blo<span>cos</span></h1>
+    <button id="pausar" class="sec">Pausar</button>
+  </header>
+  <div class="jogo">
+    <div class="palco">
+      <canvas id="tela" width="300" height="600"></canvas>
+      <div class="overlay" id="ov">
+        <h2 id="ovTitulo">Blocos</h2>
+        <p id="ovTexto">Complete linhas para eliminá-las.</p>
+        <button id="iniciar">Jogar</button>
+      </div>
+    </div>
+    <div class="lado">
+      <div class="prox"><small>Próxima</small><canvas id="prox" width="96" height="96"></canvas></div>
+      <div class="score"><small>Pontos</small><b id="pontos">0</b></div>
+      <div class="score"><small>Linhas</small><b id="linhas">0</b></div>
+      <div class="score"><small>Nível</small><b id="nivel">1</b></div>
+      <div class="score"><small>Recorde</small><b id="recorde">0</b></div>
+    </div>
+  </div>
+  <div class="controles" aria-label="Controles">
+    <button data-a="esq" aria-label="Esquerda">◀</button>
+    <button data-a="gira" aria-label="Girar">⟳</button>
+    <button data-a="desce" aria-label="Descer">▼</button>
+    <button data-a="dir" aria-label="Direita">▶</button>
+    <button data-a="cai" aria-label="Soltar">⤓</button>
+  </div>
+  <p class="ajuda">← → movem • ↑ gira • ↓ desce • espaço solta • P pausa</p>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const tela = $('tela'), ctx = tela.getContext('2d'), pc = $('prox').getContext('2d');
+const C = 10, L = 20, T = 30;
+const cor = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const PECAS = {
+  I:{m:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], c:'--teal'},
+  O:{m:[[1,1],[1,1]], c:'--gold'},
+  T:{m:[[0,1,0],[1,1,1],[0,0,0]], c:'--purple'},
+  S:{m:[[0,1,1],[1,1,0],[0,0,0]], c:'#3F9B5C'},
+  Z:{m:[[1,1,0],[0,1,1],[0,0,0]], c:'--accent'},
+  J:{m:[[1,0,0],[1,1,1],[0,0,0]], c:'--blue'},
+  L:{m:[[0,0,1],[1,1,1],[0,0,0]], c:'--orange'}
+};
+const cv = c => c.startsWith('--') ? cor(c) : c;
+
+let grade, peca, proxima, saco = [], pontos, linhas, nivel, queda, acum, ultimo, rodando = false, pausado = false;
+let recorde = 0; try { recorde = +localStorage.getItem('blocos-recorde') || 0 } catch(e) {}
+$('recorde').textContent = recorde;
+
+function sortear(){
+  if (!saco.length){ saco = Object.keys(PECAS); for (let i=saco.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [saco[i],saco[j]]=[saco[j],saco[i]]; } }
+  const k = saco.pop();
+  return {k, m: PECAS[k].m.map(r=>r.slice()), c: PECAS[k].c, x: 0, y: 0};
+}
+
+function colide(p, dx=0, dy=0, m=p.m){
+  for (let y=0;y<m.length;y++) for (let x=0;x<m[y].length;x++){
+    if (!m[y][x]) continue;
+    const nx = p.x+x+dx, ny = p.y+y+dy;
+    if (nx<0 || nx>=C || ny>=L) return true;
+    if (ny>=0 && grade[ny][nx]) return true;
+  }
+  return false;
+}
+
+function entrar(){
+  peca = proxima || sortear(); proxima = sortear();
+  peca.x = Math.floor((C - peca.m[0].length)/2); peca.y = peca.k==='I' ? -1 : 0;
+  desenharProx();
+  if (colide(peca)) fim();
+}
+
+function girar(){
+  const m = peca.m[0].map((_,i) => peca.m.map(r => r[i]).reverse());
+  for (const dx of [0,-1,1,-2,2]) if (!colide(peca, dx, 0, m)){ peca.m = m; peca.x += dx; return; }
+}
+
+function fixar(){
+  peca.m.forEach((r,y) => r.forEach((v,x) => { if (v && peca.y+y>=0) grade[peca.y+y][peca.x+x] = peca.c; }));
+  let n = 0;
+  for (let y=L-1;y>=0;y--) if (grade[y].every(Boolean)){ grade.splice(y,1); grade.unshift(Array(C).fill(null)); n++; y++; }
+  if (n){
+    pontos += [0,100,300,500,800][n] * nivel; linhas += n;
+    nivel = Math.floor(linhas/10) + 1; queda = Math.max(80, 800 - (nivel-1)*70);
+    hud();
+  }
+  entrar();
+}
+
+function descer(){ if (!colide(peca,0,1)) { peca.y++; return true; } fixar(); return false; }
+function soltar(){ let d = 0; while (!colide(peca,0,1)){ peca.y++; d++; } pontos += d*2; hud(); fixar(); }
+
+function hud(){ $('pontos').textContent = pontos; $('linhas').textContent = linhas; $('nivel').textContent = nivel; }
+
+function iniciar(){
+  grade = Array.from({length:L}, () => Array(C).fill(null));
+  pontos = 0; linhas = 0; nivel = 1; queda = 800; acum = 0; saco = []; proxima = null;
+  hud(); entrar();
+  $('ov').hidden = true; rodando = true; pausado = false; $('pausar').textContent = 'Pausar';
+  ultimo = performance.now(); requestAnimationFrame(laco);
+}
+
+function laco(t){
+  if (!rodando) return;
+  if (!pausado){
+    acum += t - ultimo;
+    if (acum > queda){ acum = 0; descer(); }
+  }
+  ultimo = t;
+  desenhar();
+  if (rodando) requestAnimationFrame(laco);
+}
+
+function fim(){
+  rodando = false;
+  if (pontos > recorde){ recorde = pontos; $('recorde').textContent = recorde; try { localStorage.setItem('blocos-recorde', recorde) } catch(e) {} }
+  $('ovTitulo').textContent = 'Fim de jogo';
+  $('ovTexto').textContent = `${pontos} pontos • ${linhas} linhas`;
+  $('iniciar').textContent = 'Jogar de novo';
+  $('ov').hidden = false;
+}
+
+function bloco(c, x, y, t, a=1){
+  c.globalAlpha = a;
+  c.beginPath(); c.roundRect(x+1, y+1, t-2, t-2, 4); c.fill();
+  c.globalAlpha = 1;
+}
+
+function desenhar(){
+  ctx.clearRect(0,0,tela.width,tela.height);
+  ctx.strokeStyle = cor('--cell'); ctx.lineWidth = 1;
+  for (let x=1;x<C;x++){ ctx.beginPath(); ctx.moveTo(x*T,0); ctx.lineTo(x*T,L*T); ctx.stroke(); }
+  for (let y=1;y<L;y++){ ctx.beginPath(); ctx.moveTo(0,y*T); ctx.lineTo(C*T,y*T); ctx.stroke(); }
+  grade.forEach((r,y) => r.forEach((c,x) => { if (c){ ctx.fillStyle = cv(c); bloco(ctx, x*T, y*T, T); } }));
+  if (!rodando) return;
+  // sombra
+  let g = 0; while (!colide(peca,0,g+1)) g++;
+  ctx.fillStyle = cv(peca.c);
+  peca.m.forEach((r,y) => r.forEach((v,x) => { if (v && peca.y+y+g>=0) bloco(ctx, (peca.x+x)*T, (peca.y+y+g)*T, T, .25); }));
+  peca.m.forEach((r,y) => r.forEach((v,x) => { if (v && peca.y+y>=0) bloco(ctx, (peca.x+x)*T, (peca.y+y)*T, T); }));
+}
+
+function desenharProx(){
+  pc.clearRect(0,0,96,96);
+  const m = proxima.m, t = 20;
+  const ys = m.map((r,i)=>r.some(Boolean)?i:-1).filter(i=>i>=0);
+  const xs = m[0].map((_,i)=>m.some(r=>r[i])?i:-1).filter(i=>i>=0);
+  const ox = (96 - xs.length*t)/2 - xs[0]*t, oy = (96 - ys.length*t)/2 - ys[0]*t;
+  pc.fillStyle = cv(proxima.c);
+  m.forEach((r,y) => r.forEach((v,x) => { if (v) bloco(pc, ox+x*t, oy+y*t, t); }));
+}
+
+function acao(a){
+  if (!rodando || pausado) return;
+  if (a==='esq' && !colide(peca,-1,0)) peca.x--;
+  if (a==='dir' && !colide(peca,1,0)) peca.x++;
+  if (a==='gira') girar();
+  if (a==='desce' && descer()){ pontos++; hud(); acum = 0; }
+  if (a==='cai') soltar();
+}
+
+function pausar(){
+  if (!rodando) return;
+  pausado = !pausado; $('pausar').textContent = pausado ? 'Continuar' : 'Pausar';
+}
+
+document.addEventListener('keydown', e => {
+  const m = {ArrowLeft:'esq',ArrowRight:'dir',ArrowUp:'gira',ArrowDown:'desce',' ':'cai',a:'esq',d:'dir',w:'gira',s:'desce'};
+  if (m[e.key]){ e.preventDefault(); if (!rodando && e.key===' ') return iniciar(); acao(m[e.key]); }
+  if (e.key==='p' || e.key==='P') pausar();
+});
+document.querySelectorAll('.controles button').forEach(b => {
+  let rep;
+  const ir = e => { e.preventDefault(); acao(b.dataset.a); if (['esq','dir','desce'].includes(b.dataset.a)) rep = setInterval(() => acao(b.dataset.a), 110); };
+  const parar = () => clearInterval(rep);
+  b.addEventListener('pointerdown', ir); b.addEventListener('pointerup', parar); b.addEventListener('pointerleave', parar);
+});
+$('iniciar').onclick = iniciar; $('pausar').onclick = pausar;
+
+grade = Array.from({length:L}, () => Array(C).fill(null)); proxima = sortear(); desenhar(); desenharProx();
+</script>
+</body>
+</html>

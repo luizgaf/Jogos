@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Termo</title>
+<link rel="stylesheet" href="comum.css">
+<style>
+.wrap{max-width:420px}
+.grade{display:grid;grid-template-rows:repeat(6,1fr);gap:6px;width:min(100%,330px);margin:0 auto}
+.linha{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.linha.treme{animation:treme .4s}
+@keyframes treme{20%,60%{translate:-6px}40%,80%{translate:6px}}
+.l{aspect-ratio:1;border-radius:8px;background:var(--panel);border:2px solid var(--board);display:grid;place-items:center;
+  font-family:var(--display);font-weight:800;font-size:clamp(1.3rem,7vw,1.8rem);text-transform:uppercase}
+.l.cheia{border-color:var(--muted);animation:pop .1s}
+@keyframes pop{50%{transform:scale(1.08)}}
+.l.vira{animation:vira .45s ease-in-out both}
+@keyframes vira{0%{transform:rotateX(0)}50%{transform:rotateX(90deg)}100%{transform:rotateX(0)}}
+.certo{background:var(--teal)!important;border-color:var(--teal)!important;color:#fff}
+.lugar{background:var(--gold)!important;border-color:var(--gold)!important;color:#1B2433}
+.nada{background:var(--muted)!important;border-color:var(--muted)!important;color:#fff}
+.teclado{display:flex;flex-direction:column;gap:6px;user-select:none}
+.fila{display:flex;gap:5px;justify-content:center}
+.tecla{flex:1;max-width:42px;height:52px;padding:0;border-radius:7px;background:var(--board);color:var(--fg);font-weight:700;text-transform:uppercase;font-size:1rem}
+.tecla.larga{max-width:68px;flex:1.6;font-size:.78rem}
+.aviso{position:fixed;top:18%;left:50%;translate:-50% 0;background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:10px;font-weight:600;
+  opacity:0;pointer-events:none;transition:opacity .2s;z-index:5}
+.aviso.on{opacity:1}
+.modo{display:flex;gap:6px}
+.modo button{padding:7px 12px}
+.modo button[aria-pressed="false"]{background:var(--panel);color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="voltar" href="index.html">← Menu</a>
+  <header>
+    <h1>Ter<span>mo</span></h1>
+    <div class="scores">
+      <div class="score"><small>Vitórias</small><b id="vit">0</b></div>
+      <div class="score"><small>Sequência</small><b id="seq">0</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <div class="modo" role="group" aria-label="Modo">
+      <button data-m="dia" aria-pressed="true">Palavra do dia</button>
+      <button data-m="livre" aria-pressed="false">Livre</button>
+    </div>
+    <button id="nova" class="sec" hidden>Nova palavra</button>
+  </div>
+  <div class="grade" id="grade"></div>
+  <div class="teclado" id="teclado"></div>
+  <p class="ajuda">Descubra a palavra em 6 tentativas. Acentos são preenchidos automaticamente.<br>
+    <span style="color:var(--teal)">■</span> lugar certo &nbsp; <span style="color:var(--gold)">■</span> lugar errado &nbsp; <span style="color:var(--muted)">■</span> não tem</p>
+</div>
+<div class="aviso" id="aviso" role="status"></div>
+<script src="termo-palavras.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const tira = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+const FILAS = ['qwertyuiop','asdfghjklç','<zxcvbnm>'];
+let modo = 'dia', resposta, alvo, linha, tent, fim, estados;
+
+function salvo(k, def){ try { return JSON.parse(localStorage.getItem(k)) ?? def } catch(e){ return def } }
+function salvar(k, v){ try { localStorage.setItem(k, JSON.stringify(v)) } catch(e) {} }
+let stats = salvo('termo-stats', {vit:0, seq:0, ultimoDia:null});
+
+function hoje(){ const d = new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }
+function indiceDoDia(){
+  const d = new Date(), base = new Date(2026,0,1);
+  const n = Math.floor((new Date(d.getFullYear(),d.getMonth(),d.getDate()) - base) / 864e5);
+  return ((n * 7919) % RESPOSTAS.length + RESPOSTAS.length) % RESPOSTAS.length;
+}
+
+function montar(){
+  const g = $('grade'); g.innerHTML = '';
+  for (let r=0;r<6;r++){
+    const li = document.createElement('div'); li.className = 'linha';
+    for (let c=0;c<5;c++){ const d = document.createElement('div'); d.className = 'l'; li.appendChild(d); }
+    g.appendChild(li);
+  }
+  const t = $('teclado'); t.innerHTML = '';
+  FILAS.forEach(f => {
+    const fi = document.createElement('div'); fi.className = 'fila';
+    [...f].forEach(k => {
+      const b = document.createElement('button'); b.className = 'tecla'; b.dataset.k = k;
+      if (k==='<'){ b.textContent = '⌫'; b.classList.add('larga'); b.dataset.k = 'Backspace'; b.setAttribute('aria-label','Apagar'); }
+      else if (k==='>'){ b.textContent = 'Enter'; b.classList.add('larga'); b.dataset.k = 'Enter'; }
+      else b.textContent = k;
+      b.tabIndex = -1; b.onmousedown = e => e.preventDefault();
+      b.onclick = () => tecla(b.dataset.k);
+      fi.appendChild(b);
+    });
+    t.appendChild(fi);
+  });
+}
+
+function novoJogo(){
+  montar();
+  resposta = modo==='dia' ? RESPOSTAS[indiceDoDia()] : RESPOSTAS[Math.floor(Math.random()*RESPOSTAS.length)];
+  alvo = tira(resposta); linha = 0; tent = ''; fim = false; estados = {};
+  $('nova').hidden = modo === 'dia';
+  if (modo === 'dia'){
+    const s = salvo('termo-dia', null);
+    if (s && s.dia === hoje()) s.tentativas.forEach(p => { tent = p; avaliar(true); });
+  }
+  hud();
+}
+
+function hud(){ $('vit').textContent = stats.vit; $('seq').textContent = stats.seq; }
+
+function avisar(msg, ms=1600){ const a = $('aviso'); a.textContent = msg; a.classList.add('on'); clearTimeout(a._t); a._t = setTimeout(() => a.classList.remove('on'), ms); }
+
+function celulas(){ return $('grade').children[linha].children; }
+
+function tecla(k){
+  if (fim) return;
+  if (k === 'Enter') return enviar();
+  if (k === 'Backspace'){ if (tent.length){ tent = tent.slice(0,-1); const c = celulas()[tent.length]; c.textContent=''; c.classList.remove('cheia'); } return; }
+  k = tira(k.toLowerCase());
+  if (/^[a-zç]$/.test(k) && tent.length < 5){ const c = celulas()[tent.length]; c.textContent = k; c.classList.add('cheia'); tent += k; }
+}
+
+function enviar(){
+  if (tent.length < 5){ tremer(); return avisar('Só palavras com 5 letras'); }
+  if (!VALIDAS.has(tent)){ tremer(); return avisar('Palavra não aceita'); }
+  if (modo === 'dia'){
+    const s = salvo('termo-dia', null);
+    const lista = s && s.dia === hoje() ? s.tentativas : [];
+    lista.push(tent); salvar('termo-dia', {dia: hoje(), tentativas: lista});
+  }
+  avaliar(false);
+}
+
+function tremer(){ const li = $('grade').children[linha]; li.classList.remove('treme'); void li.offsetWidth; li.classList.add('treme'); }
+
+function avaliar(restaurando){
+  const res = Array(5).fill('nada'), sobra = {};
+  for (let i=0;i<5;i++){ if (tent[i]===alvo[i]) res[i]='certo'; else sobra[alvo[i]] = (sobra[alvo[i]]||0)+1; }
+  for (let i=0;i<5;i++) if (res[i]!=='certo' && sobra[tent[i]]){ res[i]='lugar'; sobra[tent[i]]--; }
+  const cs = celulas(), palavra = tent, acertou = palavra === alvo;
+  // mostra a letra com acento quando está no lugar certo
+  [...palavra].forEach((ch,i) => {
+    const c = cs[i];
+    const mostrar = () => { c.textContent = res[i]==='certo' ? resposta[i] : ch; c.classList.add(res[i]); };
+    if (restaurando){ c.textContent = ch; mostrar(); }
+    else { c.textContent = ch; setTimeout(() => { c.classList.add('vira'); setTimeout(mostrar, 220); }, i*250); }
+  });
+  const atrasar = restaurando ? 0 : 5*250 + 250;
+  setTimeout(() => {
+    const ordem = {nada:0,lugar:1,certo:2};
+    [...palavra].forEach((ch,i) => { if ((ordem[estados[ch]] ?? -1) < ordem[res[i]]) estados[ch] = res[i]; });
+    document.querySelectorAll('.tecla').forEach(b => { b.classList.remove('certo','lugar','nada'); if (estados[b.dataset.k]) b.classList.add(estados[b.dataset.k]); });
+  }, atrasar);
+  linha++; tent = '';
+  if (acertou || linha === 6){
+    fim = true;
+    if (!restaurando){
+      if (acertou){ stats.vit++; stats.seq++; } else stats.seq = 0;
+      salvar('termo-stats', stats);
+      setTimeout(() => {
+        hud();
+        avisar(acertou ? ['Genial!','Magnífico!','Impressionante!','Muito bem!','Boa!','Ufa!'][linha-1] : `A palavra era ${resposta.toUpperCase()}`, 3000);
+        if (modo==='dia') setTimeout(() => avisar('Volte amanhã ou jogue no modo Livre', 2600), 3100);
+      }, atrasar);
+    }
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Enter' || e.key === 'Backspace' || e.key.length === 1){ if (e.key===' ') return; e.preventDefault(); tecla(e.key); }
+});
+document.querySelectorAll('.modo button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.modo button').forEach(x => x.setAttribute('aria-pressed', x===b));
+  modo = b.dataset.m; novoJogo(); b.blur();
+});
+$('nova').onclick = e => { novoJogo(); e.target.blur(); };
+novoJogo();
+</script>
+</body>
+</html>
