@@ -1,0 +1,225 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>2048</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Figtree:wght@400;600&display=swap">
+<style>
+/* Layout: one centered column — header with scores, square board, short help line */
+:root{
+  --bg:#EEF1F6; --fg:#1B2433; --muted:#5D6B82;
+  --board:#C9D2E0; --cell:#DCE3ED; --panel:#FFFFFF; --accent:#D9445C;
+  --overlay:rgba(238,241,246,.86);
+  --t2:#F7F9FC; --t4:#DCE6F4; --t8:#7FD1C7; --t16:#3FB8AF; --t32:#2E8FA8; --t64:#3B5BA9;
+  --t128:#F3C04F; --t256:#F09A3E; --t512:#E86A3A; --t1024:#D9445C; --t2048:#B83280; --tbig:#5B2A86;
+  --display:"Unbounded", "Arial Black", system-ui, sans-serif;
+  --body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --gap:clamp(8px, 2.4vw, 12px);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121722; --fg:#E7ECF4; --muted:#8C99AE; --board:#1F2736; --cell:#2A3446; --panel:#1A2130;
+  --accent:#F0657A; --overlay:rgba(18,23,34,.86); --t2:#3A4760; --t4:#4A5978; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121722; --fg:#E7ECF4; --muted:#8C99AE; --board:#1F2736; --cell:#2A3446; --panel:#1A2130;
+  --accent:#F0657A; --overlay:rgba(18,23,34,.86); --t2:#3A4760; --t4:#4A5978; color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:20px;box-sizing:border-box;overscroll-behavior:none}
+.wrap{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(2.4rem,11vw,3.4rem);margin:0;letter-spacing:-.03em;line-height:1}
+h1 span{color:var(--accent)}
+.scores{display:flex;gap:8px}
+.score{background:var(--panel);border-radius:10px;padding:6px 14px;min-width:64px;text-align:center}
+.score small{display:block;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600}
+.score b{font-family:var(--display);font-weight:600;font-size:1.15rem;font-variant-numeric:tabular-nums}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.bar p{margin:0;color:var(--muted);font-size:.95rem}
+.btns{display:flex;gap:8px}
+button{font:600 .9rem var(--body);border:0;border-radius:10px;padding:9px 14px;cursor:pointer;background:var(--panel);color:var(--fg)}
+button.primary{background:var(--accent);color:#fff}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.board{position:relative;width:100%;max-width:100%;aspect-ratio:1;background:var(--board);border-radius:16px;
+  padding:var(--gap);box-sizing:border-box;touch-action:none;user-select:none;-webkit-user-select:none}
+.grid,.tiles{position:absolute;inset:var(--gap);display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:var(--gap)}
+.grid div{background:var(--cell);border-radius:10px}
+.tiles{display:block}
+.tile{position:absolute;top:0;left:0;width:calc((100% - 3*var(--gap))/4);height:calc((100% - 3*var(--gap))/4);
+  transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap))));
+  transition:transform .11s ease-out}
+.tile i{display:grid;place-items:center;width:100%;height:100%;border-radius:10px;font-style:normal;
+  font-family:var(--display);font-weight:800;font-size:clamp(1.3rem,8vw,2.3rem);font-variant-numeric:tabular-nums;
+  background:var(--tc);color:var(--tx,#fff)}
+.tile.d3 i{font-size:clamp(1.05rem,6.4vw,1.85rem)}
+.tile.d4 i{font-size:clamp(.85rem,5vw,1.45rem)}
+.tile.new i{animation:appear .16s ease-out}
+.tile.merged i{animation:pop .16s ease-out}
+@keyframes appear{from{transform:scale(.2);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes pop{0%{transform:scale(1)}45%{transform:scale(1.14)}100%{transform:scale(1)}}
+
+.overlay{position:absolute;inset:0;border-radius:16px;background:var(--overlay);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;text-align:center;z-index:5;padding:16px}
+.overlay h2{font-family:var(--display);font-weight:800;font-size:clamp(1.6rem,8vw,2.4rem);margin:0}
+.overlay p{margin:0;color:var(--muted)}
+.help{color:var(--muted);font-size:.85rem;margin:0;text-align:center}
+kbd{font:600 .78rem var(--body);background:var(--panel);border-radius:5px;padding:1px 6px}
+@media (prefers-reduced-motion: reduce){.tile{transition:none}.tile i{animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>20<span>48</span></h1>
+    <div class="scores">
+      <div class="score"><small>Pontos</small><b id="score">0</b></div>
+      <div class="score"><small>Recorde</small><b id="best">0</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <p>Junte os números até chegar a <strong>2048</strong>.</p>
+    <div class="btns">
+      <button id="undo" disabled>Desfazer</button>
+      <button id="restart" class="primary">Novo jogo</button>
+    </div>
+  </div>
+  <div class="board" id="board">
+    <div class="grid" id="grid"></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="overlay" id="overlay" hidden>
+      <h2 id="ovTitle"></h2><p id="ovText"></p>
+      <div class="btns" id="ovBtns"></div>
+    </div>
+  </div>
+  <p class="help">Use as <kbd>setas</kbd> ou <kbd>W A S D</kbd> no teclado, ou deslize o dedo no tabuleiro.</p>
+</div>
+
+<script>
+(function(){
+const N=4, COLORS={2:'t2',4:'t4',8:'t8',16:'t16',32:'t32',64:'t64',128:'t128',256:'t256',512:'t512',1024:'t1024',2048:'t2048'};
+const $=id=>document.getElementById(id);
+const tilesEl=$('tiles'), scoreEl=$('score'), bestEl=$('best'), undoBtn=$('undo');
+for(let i=0;i<N*N;i++) $('grid').appendChild(document.createElement('div'));
+
+let tiles=[], score=0, best=0, nextId=1, busy=false, won=false, keepGoing=false, history=null;
+try{best=+localStorage.getItem('best2048')||0}catch(e){}
+
+function makeEl(t,cls){
+  const el=document.createElement('div'); el.className='tile '+(cls||'');
+  el.appendChild(document.createElement('i')); t.el=el; paint(t); place(t); tilesEl.appendChild(el); return el;
+}
+function paint(t){
+  const d=String(t.v).length, i=t.el.firstChild;
+  t.el.classList.remove('d3','d4'); if(d===3)t.el.classList.add('d3'); if(d>=4)t.el.classList.add('d4');
+  i.textContent=t.v;
+  i.style.setProperty('--tc','var(--'+(COLORS[t.v]||'tbig')+')');
+  i.style.setProperty('--tx', t.v<=4 ? 'var(--fg)' : (t.v===128||t.v===256?'#3A2A08':'#fff'));
+}
+function place(t){t.el.style.setProperty('--r',t.r);t.el.style.setProperty('--c',t.c)}
+function gridOf(){const g=[...Array(N)].map(()=>Array(N).fill(null));tiles.forEach(t=>g[t.r][t.c]=t);return g}
+
+function spawn(){
+  const g=gridOf(), empty=[];
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!g[r][c])empty.push([r,c]);
+  if(!empty.length)return;
+  const [r,c]=empty[Math.floor(Math.random()*empty.length)];
+  const t={id:nextId++,v:Math.random()<.9?2:4,r,c}; tiles.push(t); makeEl(t,'new');
+}
+function setScore(){
+  scoreEl.textContent=score;
+  if(score>best){best=score;try{localStorage.setItem('best2048',best)}catch(e){}}
+  bestEl.textContent=best;
+}
+function snapshot(){return {score,won,keepGoing,cells:tiles.map(t=>({v:t.v,r:t.r,c:t.c}))}}
+function load(s){
+  tilesEl.innerHTML=''; tiles=s.cells.map(x=>({id:nextId++,...x}));
+  tiles.forEach(t=>makeEl(t)); score=s.score; won=s.won; keepGoing=s.keepGoing; setScore();
+}
+
+function move(dir){
+  if(busy||!$('overlay').hidden)return;
+  const [dr,dc]={left:[0,-1],right:[0,1],up:[-1,0],down:[1,0]}[dir];
+  const g=gridOf(), before=snapshot(), dying=[], born=[];
+  let moved=false, gained=0;
+  const rs=[...Array(N).keys()], cs=[...Array(N).keys()];
+  if(dr===1)rs.reverse(); if(dc===1)cs.reverse();
+  for(const r of rs)for(const c of cs){
+    const t=g[r][c]; if(!t)continue;
+    let nr=r,nc=c;
+    while(true){const a=nr+dr,b=nc+dc; if(a<0||a>=N||b<0||b>=N||g[a][b])break; nr=a;nc=b;}
+    const a=nr+dr,b=nc+dc, n=(a>=0&&a<N&&b>=0&&b<N)?g[a][b]:null;
+    g[r][c]=null;
+    if(n&&n.v===t.v&&!n.fresh){
+      const m={id:nextId++,v:t.v*2,r:a,c:b,fresh:true};
+      g[a][b]=m; t.r=a;t.c=b; dying.push(t,n); born.push(m); gained+=m.v; moved=true;
+    }else{
+      g[nr][nc]=t; if(nr!==r||nc!==c)moved=true; t.r=nr;t.c=nc;
+    }
+  }
+  if(!moved)return;
+  history=before; undoBtn.disabled=false;
+  tiles.forEach(place);
+  busy=true;
+  setTimeout(()=>{
+    dying.forEach(t=>t.el.remove());
+    tiles=tiles.filter(t=>!dying.includes(t));
+    born.forEach(m=>{delete m.fresh;tiles.push(m);makeEl(m,'merged')});
+    score+=gained; setScore(); spawn(); busy=false; check();
+  },115);
+}
+
+function canMove(){
+  const g=gridOf();
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const t=g[r][c]; if(!t)return true;
+    if(c<N-1&&g[r][c+1]&&g[r][c+1].v===t.v)return true;
+    if(r<N-1&&g[r+1][c]&&g[r+1][c].v===t.v)return true;
+  }
+  return false;
+}
+function overlay(title,text,buttons){
+  $('ovTitle').textContent=title; $('ovText').textContent=text;
+  const box=$('ovBtns'); box.innerHTML='';
+  buttons.forEach(([label,fn,primary])=>{const b=document.createElement('button');b.textContent=label;
+    if(primary)b.className='primary';b.onclick=fn;box.appendChild(b)});
+  $('overlay').hidden=false; box.lastChild.focus();
+}
+function check(){
+  if(!won&&tiles.some(t=>t.v>=2048)){
+    won=true;
+    overlay('Você chegou a 2048!','Quer continuar para um número ainda maior?',
+      [['Continuar',()=>{keepGoing=true;$('overlay').hidden=true}],['Novo jogo',start,true]]);
+    return;
+  }
+  if(!canMove()) overlay('Fim de jogo','Você fez '+score+' pontos.',
+    [['Desfazer',()=>{$('overlay').hidden=true;undo()}],['Tentar de novo',start,true]]);
+}
+function undo(){if(!history||busy)return;load(history);history=null;undoBtn.disabled=true;$('overlay').hidden=true}
+function start(){
+  tilesEl.innerHTML='';tiles=[];score=0;won=false;keepGoing=false;history=null;undoBtn.disabled=true;
+  $('overlay').hidden=true;setScore();spawn();spawn();
+}
+
+const KEYS={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',a:'left',d:'right',w:'up',s:'down',A:'left',D:'right',W:'up',S:'down'};
+document.addEventListener('keydown',e=>{const d=KEYS[e.key];if(d){e.preventDefault();move(d)}});
+let sx=0,sy=0,touching=false;
+const board=$('board');
+board.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY;touching=true});
+board.addEventListener('pointerup',e=>{
+  if(!touching)return; touching=false;
+  const dx=e.clientX-sx, dy=e.clientY-sy;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<24)return;
+  move(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));
+});
+board.addEventListener('pointercancel',()=>touching=false);
+$('restart').onclick=start; undoBtn.onclick=undo;
+
+const hot=window.claude&&window.claude.hot;
+if(hot&&hot.snapshot)hot.snapshot(()=>({state:snapshot()}));
+function boot(data){ if(data&&data.state&&data.state.cells&&data.state.cells.length){load(data.state);bestEl.textContent=best;} else start(); }
+if(hot&&hot.ready)hot.ready(boot); else boot(hot&&hot.data||{});
+})();
+</script>
+
+</body></html>
